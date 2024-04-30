@@ -931,6 +931,13 @@ namespace UnityEngine.UIElements
             m_ScrollView.contentContainer.focusable = true;
             m_ScrollView.contentContainer.usageHints &= ~UsageHints.GroupTransform; // Scroll views with virtualized content shouldn't have the "view transform" optimization
 
+            // Setting the view data key on the ScrollView to get view data persistence on the contents. (UUM-62717)
+            // Disabling view data persistence on the vertical and horizontal scrollers to make sure we keep
+            // the previous behavior on the scrollOffset.
+            m_ScrollView.viewDataKey = "unity-vertical-collection-scroll-view";
+            m_ScrollView.verticalScroller.viewDataKey = null;
+            m_ScrollView.horizontalScroller.viewDataKey = null;
+
             focusable = true;
             isCompositeRoot = true;
             delegatesFocus = true;
@@ -1319,6 +1326,8 @@ namespace UnityEngine.UIElements
             {
                 sourceEvent.StopPropagation();
             }
+
+            focusController.IgnoreEvent(sourceEvent);
         }
 
         private protected virtual bool HandleItemNavigation(bool moveIn, bool altKey)
@@ -1374,7 +1383,7 @@ namespace UnityEngine.UIElements
             if (!evt.isPrimary)
                 return;
 
-            if (evt.button != (int)MouseButton.LeftMouse)
+            if (evt.button is not ((int)MouseButton.LeftMouse or (int)MouseButton.RightMouse))
                 return;
 
             if (evt.pointerType != PointerType.mouse)
@@ -1383,7 +1392,7 @@ namespace UnityEngine.UIElements
                 return;
             }
 
-            DoSelect(evt.localPosition, evt.clickCount, evt.actionKey, evt.shiftKey);
+            DoSelect(evt.localPosition, evt.button, evt.clickCount, evt.actionKey, evt.shiftKey);
         }
 
         private void ProcessPointerUp(IPointerEvent evt)
@@ -1394,7 +1403,7 @@ namespace UnityEngine.UIElements
             if (!evt.isPrimary)
                 return;
 
-            if (evt.button != (int)MouseButton.LeftMouse)
+            if (evt.button is not ((int)MouseButton.LeftMouse or (int)MouseButton.RightMouse))
                 return;
 
             if (evt.pointerType != PointerType.mouse)
@@ -1402,13 +1411,14 @@ namespace UnityEngine.UIElements
                 var delta = evt.position - m_TouchDownPosition;
                 if (delta.sqrMagnitude <= ScrollView.ScrollThresholdSquared)
                 {
-                    DoSelect(evt.localPosition, evt.clickCount, evt.actionKey, evt.shiftKey);
+                    DoSelect(evt.localPosition, evt.button, evt.clickCount, evt.actionKey, evt.shiftKey);
                 }
             }
             else
             {
                 var clickedIndex = virtualizationController.GetIndexFromPosition(evt.localPosition);
                 if (selectionType == SelectionType.Multiple
+                    && evt.button == (int)MouseButton.LeftMouse
                     && !evt.shiftKey
                     && !evt.actionKey
                     && m_SelectedIndices.Count > 1
@@ -1419,7 +1429,7 @@ namespace UnityEngine.UIElements
             }
         }
 
-        private void DoSelect(Vector2 localPosition, int clickCount, bool actionKey, bool shiftKey)
+        private void DoSelect(Vector2 localPosition, int mouseButton, int clickCount, bool actionKey, bool shiftKey)
         {
             var clickedIndex = virtualizationController.GetIndexFromPosition(localPosition);
             var effectiveClickCount = (m_SelectedIndices.Count() > 0 && m_SelectedIndices.First() != clickedIndex) ? 1 : (clickCount > 2) ? 2 : clickCount;
@@ -1465,10 +1475,14 @@ namespace UnityEngine.UIElements
                         {
                             m_SelectionNotChanged?.Invoke();
                         }
+                        else
+                        {
+                            SetSelection(clickedIndex);
+                        }
 
-                        SetSelection(clickedIndex);
-                        if (allowSingleClickChoice)
-                            itemsChosen?.Invoke(m_SelectedItems);
+                        // Only choose on left mouse button
+                        if (allowSingleClickChoice && mouseButton == (int)MouseButton.LeftMouse)
+                                itemsChosen?.Invoke(m_SelectedItems);
                     }
 
                     break;
@@ -1492,7 +1506,7 @@ namespace UnityEngine.UIElements
                     if (!wasClickedIndexInSelection)
                         return;
 
-                    if (!allowSingleClickChoice)
+                    if (!allowSingleClickChoice && mouseButton == (int)MouseButton.LeftMouse)
                         itemsChosen?.Invoke(m_SelectedItems);
                     break;
             }

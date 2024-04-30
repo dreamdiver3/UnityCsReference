@@ -182,9 +182,6 @@ namespace UnityEngine.UIElements
             //Note that UpdateText will update editingUtilities with the latest text if validations were made.
             textElement.edition.UpdateText(fullText);
 
-            if (!textElement.edition.isDelayed)
-                textElement.edition.UpdateValueFromText?.Invoke();
-
             if (imeEnabled)
             {
                 // Reset back to the original string. We need to do this after UpdateText as it sends a change event that will update editingUtilities.text.
@@ -196,7 +193,7 @@ namespace UnityEngine.UIElements
 
             // UpdateScrollOffset needs the new geometry of the text to compute the new scrollOffset.
             // The latest text geometry is also required for updating the cusor and selection position.
-            textElement.uitkTextHandle.Update();
+            textElement.uitkTextHandle.ComputeSettingsAndUpdate();
         }
 
         void OnValidateCommandEvent(ValidateCommandEvent evt)

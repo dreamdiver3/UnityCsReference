@@ -3,6 +3,7 @@
 // https://unity3d.com/legal/licenses/Unity_Reference_Only_License
 
 ﻿using System;
+using System.Collections.Generic;
 using UnityEngine.UIElements;
 
 namespace UnityEditor.UIElements.Bindings;
@@ -12,6 +13,8 @@ abstract class SerializedObjectBindingToBaseField<TValue, TField> : SerializedOb
     private bool isUpdating;
 
     EventCallback<ChangeEvent<TValue>> m_FieldValueChanged;
+
+    private static EqualityComparer<TValue> s_EqualityComparer = EqualityComparer<TValue>.Default;
 
     protected override string bindingId { get; } = BindingExtensions.s_SerializedBindingId;
 
@@ -120,6 +123,21 @@ abstract class SerializedObjectBindingToBaseField<TValue, TField> : SerializedOb
         }
         // We unbind here
         Unbind();
+    }
+
+    protected override void OnFieldAttached()
+    {
+        var previousValue = field.value;
+
+        base.OnFieldAttached();
+
+        if (field is VisualElement handler && !boundProperty.hasMultipleDifferentValues &&
+            s_EqualityComparer.Equals(previousValue, field.value))
+        {
+            using var evt = ChangeEvent<TValue>.GetPooled(field.value, field.value);
+            evt.elementTarget = handler;
+            handler.SendEvent(evt);
+        }
     }
 
     public override void SyncValueWithoutNotify(object value)

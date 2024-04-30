@@ -1171,7 +1171,6 @@ namespace UnityEngine.TextCore.LowLevel
             int padding, GlyphPackingMode packingMode, [Out] GlyphRect[] freeGlyphRects, ref int freeGlyphRectCount, [Out] GlyphRect[] usedGlyphRects, ref int usedGlyphRectCount,
             GlyphRenderMode renderMode, Texture2D texture);
 
-
         /// <summary>
         /// Internal function used to add multiple glyphs to atlas texture.
         /// </summary>

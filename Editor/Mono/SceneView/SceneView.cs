@@ -1349,6 +1349,9 @@ namespace UnityEditor
             rootVisualElement.Add(cameraViewVisualElement);
 
             m_SceneViewMotion = new SceneViewMotion();
+            rootVisualElement.RegisterCallback<MouseEnterEvent>(e => m_SceneViewMotion.viewportsUnderMouse = true);
+            rootVisualElement.RegisterCallback<MouseLeaveEvent>(e => m_SceneViewMotion.viewportsUnderMouse = false);
+
             m_OrientationGizmo = overlayCanvas.overlays.FirstOrDefault(x => x is SceneOrientationGizmo) as SceneOrientationGizmo;
 
             titleContent = GetLocalizedTitleContent();
@@ -1706,6 +1709,7 @@ namespace UnityEditor
                 if (s_AudioSceneView.m_PlayAudio)
                 {
                     s_AudioSceneView.m_PlayAudio = false;
+                    s_AudioSceneView.sceneAudioChanged?.Invoke(false);
                     s_AudioSceneView.Repaint();
                 }
             }
@@ -2216,9 +2220,9 @@ namespace UnityEditor
             return m_Camera.targetTexture != null;
         }
 
-        private void DoDrawCamera(Rect windowSpaceCameraRect, Rect groupSpaceCameraRect, out bool pushedGUIClip)
+        private void DoDrawCamera(Rect windowSpaceCameraRect, Rect groupSpaceCameraRect, out bool pushedGUIClipNeedsToBePopped)
         {
-            pushedGUIClip = false;
+            pushedGUIClipNeedsToBePopped = false;
 
             if (!m_Camera.gameObject.activeInHierarchy)
                 return;
@@ -2232,8 +2236,21 @@ namespace UnityEditor
 
             if (UseSceneFiltering())
             {
+                bool sceneRendersToRT = SceneCameraRendersIntoRT();
+                if (sceneRendersToRT)
+                {
+                    GUIClip.Push(groupSpaceCameraRect, Vector2.zero, Vector2.zero, true);
+                    GUIClip.Internal_PushParentClip(Matrix4x4.identity, GUIClip.GetParentMatrix(), groupSpaceCameraRect);
+                }
+
                 if (evt.type == EventType.Repaint)
                     RenderFilteredScene(groupSpaceCameraRect);
+
+                if (sceneRendersToRT)
+                {
+                    GUIClip.Internal_PopParentClip();
+                    GUIClip.Pop();
+                }
 
                 if (evt.type == EventType.Repaint)
                     RenderTexture.active = null;
@@ -2253,7 +2270,7 @@ namespace UnityEditor
                 {
                     GUIClip.Push(new Rect(0f, 0f, position.width, position.height), Vector2.zero, Vector2.zero, true);
                     GUIClip.Internal_PushParentClip(Matrix4x4.identity, GUIClip.GetParentMatrix(), groupSpaceCameraRect);
-                    pushedGUIClip = true;
+                    pushedGUIClipNeedsToBePopped = true;
                 }
                 Handles.DrawCameraStep1(groupSpaceCameraRect, m_Camera, m_CameraMode.drawMode, gridParam, drawGizmos, true);
 
@@ -2574,8 +2591,8 @@ namespace UnityEditor
                 GUIUtility.keyboardControl = m_MainViewControlID;
 
             // Draw camera
-            bool pushedGUIClip;
-            DoDrawCamera(windowSpaceCameraRect, groupSpaceCameraRect, out pushedGUIClip);
+            bool pushedGUIClipNeedsToBePopped;
+            DoDrawCamera(windowSpaceCameraRect, groupSpaceCameraRect, out pushedGUIClipNeedsToBePopped);
 
             CleanupCustomSceneLighting();
 
@@ -2620,7 +2637,7 @@ namespace UnityEditor
                 }
 
                 // If we reset the offsets pop that clip off now.
-                if (pushedGUIClip)
+                if (pushedGUIClipNeedsToBePopped)
                 {
                     GUIClip.Internal_PopParentClip();
                     GUIClip.Pop();
@@ -2728,7 +2745,8 @@ namespace UnityEditor
             if (ve == context.cameraViewVisualElement)
             {
                 ContextMenuUtility.ShowActionMenu();
-                context.Repaint();
+                // UUM-61727 - Force an InputEvent in IMGUI so the ContextMenu will actually open on all platforms
+                context.SendEvent(new Event { type = EventType.Layout });
             }
         }
 

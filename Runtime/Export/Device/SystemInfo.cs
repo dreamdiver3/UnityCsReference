@@ -21,6 +21,10 @@ namespace UnityEngine.Device
 
         public static string processorType => ShimManager.systemInfoShim.processorType;
 
+        public static string processorModel => ShimManager.systemInfoShim.processorModel;
+
+        public static string processorManufacturer => ShimManager.systemInfoShim.processorManufacturer;
+
         public static int processorFrequency => ShimManager.systemInfoShim.processorFrequency;
 
         public static int processorCount => ShimManager.systemInfoShim.processorCount;
@@ -186,6 +190,7 @@ namespace UnityEngine.Device
         public static bool supportsGraphicsFence => ShimManager.systemInfoShim.supportsGraphicsFence;
 
         public static bool supportsAsyncGPUReadback => ShimManager.systemInfoShim.supportsAsyncGPUReadback;
+        public static bool supportsParallelPSOCreation => ShimManager.systemInfoShim.supportsParallelPSOCreation;
         public static bool supportsRayTracingShaders => ShimManager.systemInfoShim.supportsRayTracingShaders;
         public static bool supportsRayTracing => ShimManager.systemInfoShim.supportsRayTracing;
         public static bool supportsInlineRayTracing => ShimManager.systemInfoShim.supportsInlineRayTracing;

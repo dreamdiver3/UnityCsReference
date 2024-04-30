@@ -369,7 +369,7 @@ namespace UnityEditor.UIElements
                 m_Content.SetMesh(m_Mesh);
             }
 
-            if (curve.keys.Length < 2)
+            if (curve == null || curve.keys.Length < 2)
                 return;
             Vector3[] vertices = m_Mesh.vertices;
             Vector3[] normals = m_Mesh.normals;
@@ -651,7 +651,7 @@ namespace UnityEditor.UIElements
                 finalColor *= playModeTintColor;
 
                 // Send the view zoom factor so that the antialias width do not grow when zooming in.
-                m_Mat.SetFloat("_ZoomFactor", scale * realWidth / CurveField.k_EdgeWidth * EditorGUIUtility.pixelsPerPoint);
+                m_Mat.SetFloat("_ZoomFactor", scale * realWidth / CurveField.k_EdgeWidth * scaledPixelsPerPoint);
 
                 // Send the view zoom correction so that the vertex shader can scale the edge triangles when below m_MinWidth.
                 m_Mat.SetFloat("_ZoomCorrection", realWidth / CurveField.k_EdgeWidth);

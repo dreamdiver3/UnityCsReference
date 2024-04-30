@@ -43,25 +43,53 @@ namespace UnityEngine.UIElements
         private int m_VariableHash;
         private List<StyleVariable> m_Variables;
         private List<int> m_SortedHash;
+        private List<int> m_UnsortedHash;
 
         public List<StyleVariable> variables => m_Variables;
 
         public void Add(StyleVariable sv)
         {
-            // Avoid duplicates. Otherwise the variable context explodes as hierarchy gets deeper.
             var hash = sv.GetHashCode();
+            int ComputeOrderSensitiveHash(int index)
+            {
+                unchecked
+                {
+                    // This needs to be reversible and order-sensitive. We use (index + 1) to avoid multiplying by 0.
+                    return (index + 1) * hash;
+                }
+            }
+
+            // Avoid duplicates. Otherwise the variable context explodes as hierarchy gets deeper.
             var hashIndex = m_SortedHash.BinarySearch(hash);
             if (hashIndex >= 0)
-                return;
-
-            m_SortedHash.Insert(~hashIndex, hash);
-
-            m_Variables.Add(sv);
-
-            unchecked
             {
-                m_VariableHash = m_Variables.Count == 0 ? sv.GetHashCode() : (m_VariableHash * 397) ^ sv.GetHashCode();
+                // UUM-32738: if the variable is already there, we need to move it to the end.
+
+                // The new variable is already at the end. Nothing to update.
+                var variableIndex = m_Variables.Count - 1;
+                if (m_UnsortedHash[variableIndex] == hash)
+                    return;
+
+                // Look for the variable starting from the end. If this is a variable that gets redefined a lot,
+                // it has more chances to be near the end.
+                for (variableIndex--; variableIndex >= 0; variableIndex--)
+                    if (m_UnsortedHash[variableIndex] == hash)
+                    {
+                        // Found the variable: Remove it and let it be re-added at the end.
+                        m_VariableHash ^= ComputeOrderSensitiveHash(variableIndex);
+                        m_Variables.RemoveAt(variableIndex);
+                        m_UnsortedHash.RemoveAt(variableIndex);
+                        break;
+                    }
             }
+            else
+            {
+                m_SortedHash.Insert(~hashIndex, hash);
+            }
+
+            m_VariableHash ^= ComputeOrderSensitiveHash(m_Variables.Count);
+            m_Variables.Add(sv);
+            m_UnsortedHash.Add(hash);
         }
 
         public void AddInitialRange(StyleVariableContext other)
@@ -73,6 +101,7 @@ namespace UnityEngine.UIElements
                 m_VariableHash = other.m_VariableHash;
                 m_Variables.AddRange(other.m_Variables);
                 m_SortedHash.AddRange(other.m_SortedHash);
+                m_UnsortedHash.AddRange(other.m_UnsortedHash);
             }
         }
 
@@ -83,6 +112,7 @@ namespace UnityEngine.UIElements
                 m_Variables.Clear();
                 m_VariableHash = 0;
                 m_SortedHash.Clear();
+                m_UnsortedHash.Clear();
             }
         }
 
@@ -91,6 +121,7 @@ namespace UnityEngine.UIElements
             m_Variables = new List<StyleVariable>();
             m_VariableHash = 0;
             m_SortedHash = new List<int>();
+            m_UnsortedHash = new List<int>();
         }
 
         public StyleVariableContext(StyleVariableContext other)
@@ -98,6 +129,7 @@ namespace UnityEngine.UIElements
             m_Variables = new List<StyleVariable>(other.m_Variables);
             m_VariableHash = other.m_VariableHash;
             m_SortedHash = new List<int>(other.m_SortedHash);
+            m_UnsortedHash = new List<int>(other.m_UnsortedHash);
         }
 
         public bool TryFindVariable(string name, out StyleVariable v)

@@ -83,7 +83,7 @@ namespace UnityEditor.Search
             }
 
             so = new SerializedObject(obj);
-            var property = so.FindProperty(propertyPath);
+            var property = so.FindPropertyIgnoreCase(propertyPath);
             if (property != null)
                 return property;
 
@@ -99,12 +99,12 @@ namespace UnityEditor.Search
                         return null;
                     }
 
-                    var resolvedProperty = so.FindProperty(resolvedPropertyPath);
+                    var resolvedProperty = so.FindPropertyIgnoreCase(resolvedPropertyPath);
                     if (resolvedProperty != null)
                         return resolvedProperty;
                 }
 
-                property = so.FindProperty($"m_{propertyPath}");
+                property = so.FindPropertyIgnoreCase($"m_{propertyPath}");
                 if (property != null)
                 {
                     view.StoreAlias(recordKey, property.propertyPath);
@@ -115,8 +115,8 @@ namespace UnityEditor.Search
                 var next = property.NextVisible(true);
                 while (next)
                 {
-                    if (property.name.EndsWith(propertyPath, StringComparison.OrdinalIgnoreCase) ||
-                        (property.name.Contains(" ") && property.name.Replace(" ", "").EndsWith(propertyPath, StringComparison.OrdinalIgnoreCase)))
+                    var propertyName = property.name.Replace(" ", "");
+                    if (propertyName.Equals(propertyPath, StringComparison.OrdinalIgnoreCase))
                     {
                         view.StoreAlias(recordKey, property.propertyPath);
                         return property;
@@ -127,8 +127,19 @@ namespace UnityEditor.Search
                 view.StoreAlias(recordKey, string.Empty);
                 so?.Dispose();
                 so = null;
+
                 return null;
             }
+        }
+
+        internal static string GetEnumValue(SerializedProperty p)
+        {
+            return p.enumNames[p.enumValueIndex].Replace(" ", "");
+        }
+
+        internal static string GetEnumValue(Type type, SerializedProperty p)
+        {
+            return type.GetEnumValues().GetValue(p.intValue).ToString().Replace(" ", "");
         }
 
         internal static object GetSerializedPropertyValue(SerializedProperty p)
@@ -143,14 +154,14 @@ namespace UnityEditor.Search
                 case SerializedPropertyType.Boolean: return p.boolValue;
                 case SerializedPropertyType.Float: return p.floatValue;
                 case SerializedPropertyType.String: return p.stringValue;
-                case SerializedPropertyType.Enum: return p.enumNames[p.enumValueIndex];
+                case SerializedPropertyType.Enum: return GetEnumValue(p);
                 case SerializedPropertyType.Bounds: return p.boundsValue.size.magnitude;
                 case SerializedPropertyType.BoundsInt: return p.boundsIntValue.size.magnitude;
                 case SerializedPropertyType.Color: return p.colorValue;
                 case SerializedPropertyType.FixedBufferSize: return p.fixedBufferSize;
 
-                case SerializedPropertyType.Rect: return p.rectValue.ToString();
-                case SerializedPropertyType.RectInt: return p.rectIntValue.ToString();
+                case SerializedPropertyType.Rect: return Utils.ToString(p.rectValue);
+                case SerializedPropertyType.RectInt: return Utils.ToString(p.rectIntValue);
 
                 case SerializedPropertyType.Vector2: return Utils.ToString(p.vector2Value, 2);
                 case SerializedPropertyType.Vector3: return Utils.ToString(p.vector3Value, 3);
@@ -159,7 +170,7 @@ namespace UnityEditor.Search
                 case SerializedPropertyType.Vector3Int: return Utils.ToString(p.vector3IntValue);
 
                 case SerializedPropertyType.AnimationCurve: return p.animationCurveValue.ToString();
-                case SerializedPropertyType.Quaternion: return p.quaternionValue.eulerAngles.ToString();
+                case SerializedPropertyType.Quaternion: return Utils.ToString(p.quaternionValue.eulerAngles);
 
                 case SerializedPropertyType.ObjectReference: return p.objectReferenceValue;
                 case SerializedPropertyType.ExposedReference: return p.exposedReferenceValue;
@@ -206,31 +217,18 @@ namespace UnityEditor.Search
             var iconType = Utils.FindTextureForType(objType);
             using (var so = new SerializedObject(obj))
             {
-                var p = so.GetIterator();
-                var next = p.NextVisible(true);
-                while (next)
+                SearchUtils.IterateSupportedProperties(so, p =>
                 {
-                    var supported = SearchUtils.IsPropertyTypeSupported(p);
-                    if (supported)
-                    {
-                        var column = new SearchColumn(
+                    var column = new SearchColumn(
                             path: $"{objType.Name}/{p.propertyPath.Replace(".", "/")}",
                             selector: "#" + p.propertyPath,
                             provider: p.propertyType.ToString(),
                             content: new GUIContent(Utils.TrimText(p.displayName, 31), iconType, p.tooltip));
-                        ItemSelectors.Styles.itemLabel.CalcMinMaxWidth(column.content, out column.width, out _);
-                        if (p.hasVisibleChildren)
-                            column.width = Mathf.Min(220, column.width);
-                        columns.Add(column);
-                    }
-
-                    var isVector = p.propertyType == SerializedPropertyType.Vector3 ||
-                        p.propertyType == SerializedPropertyType.Vector4 ||
-                        p.propertyType == SerializedPropertyType.Quaternion ||
-                        p.propertyType == SerializedPropertyType.Vector2;
-
-                    next = p.NextVisible(supported && !p.isArray && !p.isFixedBuffer && !isVector);
-                }
+                    ItemSelectors.Styles.itemLabel.CalcMinMaxWidth(column.content, out column.width, out _);
+                    if (p.hasVisibleChildren)
+                        column.width = Mathf.Min(220, column.width);
+                    columns.Add(column);
+                });
             }
         }
 

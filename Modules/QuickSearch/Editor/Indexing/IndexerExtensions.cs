@@ -201,24 +201,24 @@ namespace UnityEditor.Search
             indexer.AddProperty("t", "asmdef", context.documentIndex);
         }
 
-        [CustomObjectIndexer(typeof(Texture2D), version = 2)]
+        [CustomObjectIndexer(typeof(Texture2D), version = 3)]
         internal static void Texture2DIndexing(CustomObjectIndexerTarget context, ObjectIndexer indexer)
         {
             if (!(context.target is Texture2D texture) || !indexer.settings.options.properties)
                 return;
 
-            indexer.IndexProperty<TextureFormat, Texture2D>(context.documentIndex, "format", texture.format.ToString(), saveKeyword: true, exact: true);
-            indexer.IndexProperty<FilterMode, Texture2D>(context.documentIndex, "filtermode", texture.filterMode.ToString(), saveKeyword: true, exact: true);
-            indexer.IndexProperty<TextureDimension, Texture2D>(context.documentIndex, "dimension", texture.dimension.ToString(), saveKeyword: true, exact: true);
+            indexer.IndexProperty<TextureFormat, Texture2D>(context.documentIndex, "format", texture.format.ToString(), saveKeyword: true, exact: true, "Format", string.Empty);
+            indexer.IndexProperty<FilterMode, Texture2D>(context.documentIndex, "filtermode", texture.filterMode.ToString(), saveKeyword: true, exact: true, "Filter Mode", string.Empty);
+            indexer.IndexProperty<TextureDimension, Texture2D>(context.documentIndex, "dimension", texture.dimension.ToString(), saveKeyword: true, exact: true, "Dimension", string.Empty);
 
             var ti = AssetImporter.GetAtPath(context.id) as TextureImporter;
             if (ti)
             {
-                indexer.IndexProperty<TextureImporterType, TextureImporter>(context.documentIndex, "type", ti.textureType.ToString(), saveKeyword: true, exact: true);
-                indexer.IndexProperty<TextureImporterShape, TextureImporter>(context.documentIndex, "shape", ti.textureShape.ToString(), saveKeyword: true, exact: true);
-                indexer.IndexProperty<bool, TextureImporter>(context.documentIndex, "readable", ti.isReadable.ToString(), saveKeyword: false, exact: true);
-                indexer.IndexProperty<bool, TextureImporter>(context.documentIndex, "srgb", ti.sRGBTexture.ToString(), saveKeyword: false, exact: true);
-                indexer.IndexProperty<TextureImporterCompression, TextureImporter>(context.documentIndex, "compression", ti.textureCompression.ToString(), saveKeyword: true, exact: true);
+                indexer.IndexProperty<TextureImporterType, TextureImporter>(context.documentIndex, "type", ti.textureType.ToString(), saveKeyword: true, exact: true, "Type", string.Empty);
+                indexer.IndexProperty<TextureImporterShape, TextureImporter>(context.documentIndex, "shape", ti.textureShape.ToString(), saveKeyword: true, exact: true, "Shape", string.Empty);
+                indexer.IndexProperty<bool, TextureImporter>(context.documentIndex, "readable", ti.isReadable.ToString(), saveKeyword: false, exact: true, "Readable", string.Empty);
+                indexer.IndexProperty<bool, TextureImporter>(context.documentIndex, "srgb", ti.sRGBTexture.ToString(), saveKeyword: false, exact: true, "sRGB", string.Empty);
+                indexer.IndexProperty<TextureImporterCompression, TextureImporter>(context.documentIndex, "compression", ti.textureCompression.ToString(), saveKeyword: true, exact: true, "Compression", string.Empty);
 
                 var so = new SerializedObject(ti);
                 var psArray = so.FindProperty("m_PlatformSettings");
@@ -232,7 +232,7 @@ namespace UnityEditor.Search
                         {
                             // Loop over all properties in the DefaultPlatformSettings
                             var parentPath = platformSettings.propertyPath;
-                            indexer.IndexProperties(context.documentIndex, platformSettings, recursive: false, 2, p => p.propertyPath.StartsWith(parentPath));
+                            indexer.IndexVisibleProperties(context.documentIndex, platformSettings, recursive: false, 2, p => p.propertyPath.StartsWith(parentPath));
                             break;
                         }
                     }
@@ -327,17 +327,17 @@ namespace UnityEditor.Search
 
                     case MaterialProperty.PropType.Int:
                         indexer.AddNumber(propertyName, property.intValue, indexer.settings.baseScore, context.documentIndex);
-                        indexer.MapProperty(propertyName, shaderPropName, null, "Number", ownerPropertyType.AssemblyQualifiedName, false);
+                        indexer.MapProperty(propertyName, shaderPropName, null, "Number", ownerPropertyType.AssemblyQualifiedName);
                         break;
 
                     case MaterialProperty.PropType.Float:
                         indexer.AddNumber(propertyName, property.floatValue, indexer.settings.baseScore, context.documentIndex);
-                        indexer.MapProperty(propertyName, shaderPropName, null, "Number", ownerPropertyType.AssemblyQualifiedName, false);
+                        indexer.MapProperty(propertyName, shaderPropName, null, "Number", ownerPropertyType.AssemblyQualifiedName);
                         break;
 
                     case MaterialProperty.PropType.Range:
                         indexer.AddNumber(propertyName, property.floatValue, indexer.settings.baseScore, context.documentIndex);
-                        indexer.MapProperty(propertyName, shaderPropName, null, "Number", ownerPropertyType.AssemblyQualifiedName, false);
+                        indexer.MapProperty(propertyName, shaderPropName, null, "Number", ownerPropertyType.AssemblyQualifiedName);
                         break;
 
                     case MaterialProperty.PropType.Texture:

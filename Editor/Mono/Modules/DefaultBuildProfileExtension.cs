@@ -18,7 +18,7 @@ namespace UnityEditor.Modules
         static readonly GUIContent k_AutoconnectProfiler = EditorGUIUtility.TrTextContent("Autoconnect Profiler", "When the build is started, an open Profiler Window will automatically connect to the Player and start profiling. The \"Build And Run\" option will also automatically open the Profiler Window.");
         static readonly GUIContent k_AutoconnectProfilerDisabled = EditorGUIUtility.TrTextContent("Autoconnect Profiler", "Profiling is only enabled in a Development Player.");
         static readonly GUIContent k_BuildWithDeepProfiler = EditorGUIUtility.TrTextContent("Deep Profiling Support", "Build Player with Deep Profiling Support. This might affect Player performance.");
-        static readonly GUIContent k_BuildWithDeepProfilerDisabled = EditorGUIUtility.TrTextContent("Deep Profiling", "Profiling is only enabled in a Development Player.");
+        static readonly GUIContent k_BuildWithDeepProfilerDisabled = EditorGUIUtility.TrTextContent("Deep Profiling Support", "Profiling is only enabled in a Development Player.");
         static readonly GUIContent k_AllowDebugging = EditorGUIUtility.TrTextContent("Script Debugging", "Enable this setting to allow your script code to be debugged.");
         static readonly GUIContent k_WaitForManagedDebugger = EditorGUIUtility.TrTextContent("Wait For Managed Debugger", "Show a dialog where you can attach a managed debugger before any script execution. Can also use volume Up or Down button to confirm on Android.");
         static readonly GUIContent k_ManagedDebuggerFixedPort = EditorGUIUtility.TrTextContent("Managed Debugger Fixed Port", "Use the specified port to attach to the managed debugger. If 0, the port will be automatically selected.");
@@ -70,6 +70,10 @@ namespace UnityEditor.Modules
         {
         }
 
+        public virtual void CopyPlatformSettingsFromBuildProfile(BuildProfilePlatformSettingsBase platformSettings)
+        {
+        }
+
         public virtual void OnDisable()
         {
         }
@@ -95,8 +99,8 @@ namespace UnityEditor.Modules
             if (platformWarningsGUI != null)
                 settingsGUI.Add(platformWarningsGUI);
             settingsGUI.Add(platformSettingsGUI);
-            if (m_IsClassicProfile && BuildPlayerWindow.WillDrawMultiplayerBuildOptions())
-                settingsGUI.Add(CreateMultiplayerSettingsGUI());
+            if (BuildPlayerWindow.WillDrawMultiplayerBuildOptions())
+                settingsGUI.Add(CreateMultiplayerSettingsGUI(serializedObject.targetObject as BuildProfile));
             settingsGUI.Add(commonSettingsGUI);
             return settingsGUI;
         }
@@ -166,14 +170,14 @@ namespace UnityEditor.Modules
                 });
         }
 
-        VisualElement CreateMultiplayerSettingsGUI()
+        VisualElement CreateMultiplayerSettingsGUI(BuildProfile profile)
         {
             return new IMGUIContainer(
                 () =>
                 {
                     var oldLabelWidth = EditorGUIUtility.labelWidth;
                     EditorGUIUtility.labelWidth = labelWidth;
-                    BuildPlayerWindow.DrawMultiplayerBuildOption(m_NamedBuildTarget);
+                    BuildPlayerWindow.DrawMultiplayerBuildOption(profile);
                     EditorGUIUtility.labelWidth = oldLabelWidth;
                 });
         }
@@ -441,7 +445,7 @@ namespace UnityEditor.Modules
         public virtual void ShowInternalPlatformBuildOptions()
         {
         }
-        
+
         /// Helper method for rendering an IMGUI popup over an enum
         /// serialized property.
         /// </summary>

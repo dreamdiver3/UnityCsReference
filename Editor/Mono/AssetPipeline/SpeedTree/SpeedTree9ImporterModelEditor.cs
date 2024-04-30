@@ -40,6 +40,7 @@ namespace UnityEditor.SpeedTree.Importer
         // Additional Settings properties
         private SerializedProperty m_MotionVectorModeEnumValue;
         private SerializedProperty m_GenerateColliders;
+        private SerializedProperty m_GenerateRigidbody;
 
         // LOD properties
         private SerializedProperty m_EnableSmoothLOD;
@@ -113,6 +114,7 @@ namespace UnityEditor.SpeedTree.Importer
 
                 m_MotionVectorModeEnumValue = FindPropertyFromName(addSettingsStr, nameof(addSettings.motionVectorModeEnumValue));
                 m_GenerateColliders = FindPropertyFromName(addSettingsStr, nameof(addSettings.generateColliders));
+                m_GenerateRigidbody = FindPropertyFromName(addSettingsStr, nameof(addSettings.generateRigidbody));
             }
 
             // LOD properties
@@ -200,7 +202,8 @@ namespace UnityEditor.SpeedTree.Importer
             // Additional Settings
             SpeedTreeImporterCommonEditor.ShowAdditionalSettingsGUI(
                 ref m_MotionVectorModeEnumValue,
-                ref m_GenerateColliders);
+                ref m_GenerateColliders,
+                ref m_GenerateRigidbody);
 
             EditorGUILayout.Space();
 
@@ -277,14 +280,19 @@ namespace UnityEditor.SpeedTree.Importer
                 importerArray.Add(importer);
             }
 
-            var renderPipeline = SpeedTreeImporterCommon.GetCurrentRenderPipelineType();
+            string defaultShaderName = String.Empty;
+            if (TryGetShaderForCurrentRenderPipeline(out var shader))
+            {
+                defaultShaderName = shader.name;
+            }
+            else
+            {
+                Debug.LogWarning("SpeedTree9 shader is invalid, cannot create Materials for this SpeedTree asset.");
+            }
 
             // In tests assetTargets can become null
             for (int i = 0; i < Math.Min(importerArray.Count, prefabs?.Length ?? 0); ++i)
             {
-                var im = importerArray[i];
-                var defaultShaderName = im.GetShaderNameFromPipeline(renderPipeline);
-
                 foreach (var mr in prefabs[i].transform.GetComponentsInChildren<MeshRenderer>())
                 {
                     foreach (var mat in mr.sharedMaterials)

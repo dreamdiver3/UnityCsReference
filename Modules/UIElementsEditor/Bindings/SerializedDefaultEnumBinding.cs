@@ -122,23 +122,11 @@ class SerializedDefaultEnumBinding : SerializedObjectBindingToBaseField<string, 
         }
 
 
-        var originalValue = this.lastFieldValueIndex = c.index;
+        this.lastFieldValueIndex = c.index;
 
         BindingsStyleHelpers.RegisterRightClickMenu(c, property);
 
         this.field = c;
-
-        if (originalValue == c.index) //the value hasn't changed, but we want the binding to send an event no matter what
-        {
-            if (c is VisualElement handler)
-            {
-                using (ChangeEvent<string> evt = ChangeEvent<string>.GetPooled(c.value, c.value))
-                {
-                    evt.elementTarget = handler;
-                    handler.SendEvent(evt);
-                }
-            }
-        }
     }
 
     protected override void SyncPropertyToField(PopupField<string> c, SerializedProperty p)
@@ -153,14 +141,17 @@ class SerializedDefaultEnumBinding : SerializedObjectBindingToBaseField<string, 
         }
 
         int propValueIndex = p.enumValueIndex;
+        int newIndex;
         if (propValueIndex >= 0 && propValueIndex < enumIndexToDisplayIndex.Count)
-        {
-            c.index = lastFieldValueIndex = enumIndexToDisplayIndex[propValueIndex];
-        }
+            newIndex = lastFieldValueIndex = enumIndexToDisplayIndex[propValueIndex];
         else
-        {
-            c.index = lastFieldValueIndex = kDefaultValueIndex;
-        }
+            newIndex = lastFieldValueIndex = kDefaultValueIndex;
+
+        // We dont want to trigger a change event as this will cause the value to be applied to all targets.
+        if (p.hasMultipleDifferentValues)
+            c.SetIndexWithoutNotify(newIndex);
+        else
+            c.index = newIndex;
     }
 
     protected override void UpdateLastFieldValue()

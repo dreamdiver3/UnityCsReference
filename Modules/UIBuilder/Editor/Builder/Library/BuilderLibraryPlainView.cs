@@ -2,8 +2,8 @@
 // Copyright (c) Unity Technologies. For terms of use, see
 // https://unity3d.com/legal/licenses/Unity_Reference_Only_License
 
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -65,7 +65,6 @@ namespace Unity.UI.Builder
         readonly VisualElement m_ContentContainer;
         readonly List<LibraryPlainViewItem> m_DummyItems = new List<LibraryPlainViewItem>();
         readonly List<LibraryPlainViewItem> m_PlainViewItems = new List<LibraryPlainViewItem>();
-        readonly IEnumerable<TreeViewItem> m_Items;
 
         LibraryPlainViewItem m_SelectedItem;
 
@@ -74,7 +73,7 @@ namespace Unity.UI.Builder
 
         public override VisualElement primaryFocusable => m_ContentContainer;
 
-        public BuilderLibraryPlainView(IEnumerable<TreeViewItem> items)
+        public BuilderLibraryPlainView(IList<TreeViewItem> items)
         {
             var builderTemplate = BuilderPackageUtilities.LoadAssetAtPath<VisualTreeAsset>(BuilderConstants.LibraryUIPath + "/BuilderLibraryPlainView.uxml");
             builderTemplate.CloneTree(this);
@@ -118,55 +117,6 @@ namespace Unity.UI.Builder
             FillView(m_Items);
         }
 
-        void AdjustSpace(PersistedFoldout foldout)
-        {
-            if (foldout.contentContainer.style.display == DisplayStyle.None)
-                return;
-
-            foreach (var dummy in m_DummyItems)
-            {
-                if (dummy.parent == foldout)
-                    dummy.RemoveFromHierarchy();
-            }
-
-            var plainViewItem = foldout.contentContainer.Q<LibraryPlainViewItem>();
-            var plainViewItemSize = new Vector2(plainViewItem.resolvedStyle.width, plainViewItem.resolvedStyle.height);
-            var itemsInRow = (int)Mathf.Floor(foldout.contentContainer.resolvedStyle.width / plainViewItemSize.x);
-
-            var foldoutItemsCount = foldout.contentContainer.childCount;
-            if (foldoutItemsCount <= itemsInRow)
-            {
-                foldout.contentContainer.style.justifyContent = Justify.FlexStart;
-                return;
-            }
-
-            foldout.contentContainer.style.justifyContent = Justify.SpaceAround;
-            var rem = foldoutItemsCount % itemsInRow;
-            if (rem == 0)
-                return;
-
-            var numberOfRequiredDummies = itemsInRow - rem;
-
-            for (var i = 0; i < numberOfRequiredDummies; i++)
-                foldout.Add(GetDummyItemView());
-        }
-
-        LibraryPlainViewItem GetDummyItemView()
-        {
-            foreach (var item in m_DummyItems.Where(item => item.parent == null))
-            {
-                return item;
-            }
-
-            var id = (int)Random.Range(0, float.MaxValue);
-            while (m_Items.Any(i => i.id == id))
-                id = (int)Random.Range(0, float.MaxValue);
-            var newItem = new LibraryPlainViewItem(new TreeViewItemData<BuilderLibraryTreeItem>(id, null));
-
-            m_DummyItems.Add(newItem);
-            return newItem;
-        }
-
         public override VisualElement contentContainer => m_ContentContainer == null ? this : m_ContentContainer;
 
         void FillView(IEnumerable<TreeViewItem> items, VisualElement itemsParent = null)
@@ -182,7 +132,6 @@ namespace Unity.UI.Builder
                         categoryFoldout.tag = BuilderConstants.EditorOnlyTag;
                         categoryFoldout.Q(LibraryFoldout.TagLabelName).AddToClassList(BuilderConstants.TagPillClassName);
                     }
-                    categoryFoldout.contentContainer.RegisterCallback<GeometryChangedEvent>(e => AdjustSpace(categoryFoldout));
                     categoryFoldout.AddToClassList(k_PlainViewFoldoutStyle);
                     Add(categoryFoldout);
                     FillView(item.children, categoryFoldout);
@@ -264,7 +213,7 @@ namespace Unity.UI.Builder
                 evt.StopImmediatePropagation();
                 return;
             }
-            
+
             var libraryItem = GetLibraryTreeItem(evt.elementTarget);
 
             evt.menu.AppendAction(
@@ -274,5 +223,13 @@ namespace Unity.UI.Builder
         }
 
         public override void Refresh() {}
+
+        public override void FilterView(string value)
+        {
+            m_ContentContainer.Clear();
+            m_PlainViewItems.Clear();
+            m_VisibleItems = string.IsNullOrEmpty(value) ? m_Items : FilterTreeViewItems(m_Items, value);
+            FillView(m_VisibleItems);
+        }
     }
 }

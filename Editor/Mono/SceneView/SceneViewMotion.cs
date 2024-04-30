@@ -29,6 +29,7 @@ namespace UnityEditor
         internal const string k_SetSceneViewMotionHotControlEventCommandName = "SetSceneViewMotionHotControlEventCommand"; // Also used in tests.
 
         bool m_Moving;
+        public bool viewportsUnderMouse { get; set; }
         static readonly CameraFlyModeContext s_CameraFlyModeContext = new CameraFlyModeContext();
 
         // used by Tests/EditModeAndPlayModeTests/SceneView/CameraFlyModeContextTests
@@ -76,34 +77,36 @@ namespace UnityEditor
             ShortcutIntegration.instance.contextManager.RegisterToolContext(s_CameraFlyModeContext);
         };
 
-        internal abstract class SceneViewContext : IShortcutToolContext
+        internal abstract class SceneViewContext : IShortcutContext
         {
             public SceneView window => EditorWindow.focusedWindow as SceneView;
             public virtual bool active => ViewHasFocus;
             public static bool ViewHasFocus => (EditorWindow.focusedWindow is SceneView view) && view.sceneViewMotion != null;
+            public static bool ViewHasFocusAndViewportUnderMouse => ViewHasFocus && (EditorWindow.focusedWindow as SceneView).sceneViewMotion.viewportsUnderMouse;
         }
 
         [ReserveModifiers(ShortcutModifiers.Shift)]
         internal class SceneViewViewport : SceneViewContext
         {
+            public override bool active => ViewHasFocusAndViewportUnderMouse;
         }
 
         [ReserveModifiers(ShortcutModifiers.Shift)]
         class SceneViewViewport2D : SceneViewContext
         {
-            public override bool active => ViewHasFocus && (window.in2DMode || window.isRotationLocked);
+            public override bool active => ViewHasFocusAndViewportUnderMouse && (window.in2DMode || window.isRotationLocked);
         }
 
         [ReserveModifiers(ShortcutModifiers.Shift)]
         class SceneViewViewport3D : SceneViewContext
         {
-            public override bool active => ViewHasFocus && !window.in2DMode && !window.isRotationLocked;
+            public override bool active => ViewHasFocusAndViewportUnderMouse && !window.in2DMode && !window.isRotationLocked;
         }
 
         [ReserveModifiers(ShortcutModifiers.Shift)]
         class SceneViewViewportLockedPanTool : SceneViewContext
         {
-            public override bool active => ViewHasFocus && Tools.current == Tool.View;
+            public override bool active => ViewHasFocusAndViewportUnderMouse&& Tools.current == Tool.View;
         }
 
         [Shortcut(k_PanFocusTool, typeof(SceneViewViewport), KeyCode.Mouse2)]
@@ -636,13 +639,16 @@ namespace UnityEditor
 
         void HandleScrollWheel(SceneView view, bool zoomTowardsCenter)
         {
-            var evt = Event.current;
-            float scrollDelta = evt.delta.magnitude * Mathf.Sign(Mathf.Min(evt.delta.x,  evt.delta.y));
-
+            var evt = Event. current;
+            var scrollDelta = Event.current.delta.y;
             if (Tools.s_LockedViewTool == ViewTool.FPS)
             {
-                // On some OSs, macOS for example, holding Shift while scrolling is interpreted as horizontal scroll at the system level
-                // and that would cause the scroll delta to be set on the x coord instead of y. Therefore here we're taking the magnitude instead of specific component's value.
+                // On MacOS, scrolling with Shift down is interpreted as a horizontal scroll at the 0S level.
+                // On Window, due to UUM-43552 a change was done at the editor's win platform layer to mimic macOS behaviour and swap x/y deltas.
+                if ((evt.modifiers & EventModifiers.Shift) != 0 &&
+                    (Application.platform == RuntimePlatform.OSXEditor || Application.platform == RuntimePlatform.WindowsEditor))
+                    scrollDelta = Event.current.delta.x;
+                
                 float scrollWheelDelta = scrollDelta * m_FPSScrollWheelMultiplier;
                 view.cameraSettings.speedNormalized -= scrollWheelDelta;
                 float cameraSettingsSpeed = view.cameraSettings.speed;

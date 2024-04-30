@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor.Audio;
 using UnityEditor.Audio.UIElements;
+using UnityEditor.ShortcutManagement;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.Assertions;
@@ -121,23 +122,29 @@ sealed class AudioContainerWindow : EditorWindow
     void OnEnable()
     {
         Instance = this;
-
         m_DiceIconOff = EditorGUIUtility.IconContent("AudioRandomContainer On Icon").image as Texture2D;
         m_DiceIconOn = EditorGUIUtility.IconContent("AudioRandomContainer Icon").image as Texture2D;
-
         SetTitle();
-
-        m_IsInitializing = false;
-        m_Day0ElementsInitialized = false;
-        m_ContainerElementsInitialized = false;
     }
 
     void OnDisable()
     {
         Instance = null;
         State.OnDestroy();
+        UnsubscribeFromGUICallbacksAndEvents();
+        m_IsInitializing = false;
+        m_Day0ElementsInitialized = false;
+        m_ContainerElementsInitialized = false;
         m_CachedElements.Clear();
         m_AddedElements.Clear();
+    }
+
+    private void OnFocus()
+    {
+        if (State.AudioContainer != null)
+        {
+            UpdateTransportButtonStates();
+        }
     }
 
     void Update()
@@ -233,6 +240,7 @@ sealed class AudioContainerWindow : EditorWindow
 
                 m_Day0RootVisualElement.style.display = DisplayStyle.None;
                 m_ContainerRootVisualElement.style.display = DisplayStyle.Flex;
+                m_CachedElements = State.AudioContainer.elements.ToList();
                 m_ClipsListView.Rebuild(); // Force a list rebuild when the list has changed or it will not always render correctly due to a UI toolkit bug.
             }
         }
@@ -271,21 +279,33 @@ sealed class AudioContainerWindow : EditorWindow
 
     void SubscribeToGUICallbacksAndEvents()
     {
+        if (!m_ContainerElementsInitialized || m_IsSubscribedToGUICallbacksAndEvents)
+        {
+            return;
+        }
+
         SubscribeToPreviewCallbacksAndEvents();
         SubscribeToVolumeCallbacksAndEvents();
         SubscribeToPitchCallbacksAndEvents();
         SubscribeToClipListCallbacksAndEvents();
         SubscribeToAutomaticTriggerCallbacksAndEvents();
+        SubscribeToTooltipCallbacksAndEvents();
         m_IsSubscribedToGUICallbacksAndEvents = true;
     }
 
     void UnsubscribeFromGUICallbacksAndEvents()
     {
+        if (!m_ContainerElementsInitialized || !m_IsSubscribedToGUICallbacksAndEvents)
+        {
+            return;
+        }
+
         UnsubscribeFromPreviewCallbacksAndEvents();
         UnsubscribeFromVolumeCallbacksAndEvents();
         UnsubscribeFromPitchCallbacksAndEvents();
         UnsubscribeFromClipListCallbacksAndEvents();
         UnsubscribeFromAutomaticTriggerCallbacksAndEvents();
+        UnsubscribeFromTooltipCallbacksAndEvents();
         m_IsSubscribedToGUICallbacksAndEvents = false;
     }
 
@@ -508,12 +528,14 @@ sealed class AudioContainerWindow : EditorWindow
             m_VolumeRandomizationButtonImage.style.backgroundImage = new StyleBackground(m_DiceIconOn);
             m_VolumeRandomizationRangeSlider.SetEnabled(true);
             m_VolumeRandomizationRangeField.SetEnabled(true);
+            m_VolumeRandomRangeTracker.SetEnabled(true);
         }
         else
         {
             m_VolumeRandomizationButtonImage.style.backgroundImage = new StyleBackground(m_DiceIconOff);
             m_VolumeRandomizationRangeSlider.SetEnabled(false);
             m_VolumeRandomizationRangeField.SetEnabled(false);
+            m_VolumeRandomRangeTracker.SetEnabled(false);
         }
     }
 
@@ -613,12 +635,14 @@ sealed class AudioContainerWindow : EditorWindow
             m_PitchRandomizationButtonImage.style.backgroundImage = new StyleBackground(m_DiceIconOn);
             m_PitchRandomizationRangeSlider.SetEnabled(true);
             m_PitchRandomizationRangeField.SetEnabled(true);
+            m_PitchRandomRangeTracker.SetEnabled(true);
         }
         else
         {
             m_PitchRandomizationButtonImage.style.backgroundImage = new StyleBackground(m_DiceIconOff);
             m_PitchRandomizationRangeSlider.SetEnabled(false);
             m_PitchRandomizationRangeField.SetEnabled(false);
+            m_PitchRandomRangeTracker.SetEnabled(false);
         }
     }
 
@@ -1089,6 +1113,39 @@ sealed class AudioContainerWindow : EditorWindow
         m_TimeRandomizationRangeSlider?.UnregisterValueChangedCallback(OnTimeRandomizationRangeChanged);
     }
 
+    void SubscribeToTooltipCallbacksAndEvents()
+    {
+        rootVisualElement.RegisterCallback<TooltipEvent>(ShowTooltip, TrickleDown.TrickleDown);
+    }
+
+    void UnsubscribeFromTooltipCallbacksAndEvents()
+    {
+        rootVisualElement.UnregisterCallback<TooltipEvent>(ShowTooltip);
+    }
+
+    void ShowTooltip(TooltipEvent evt)
+    {
+        var name = (evt.target as VisualElement).name;
+
+        if (name == "play-button" || name == "play-button-image")
+        {
+            var mode = State.IsPlayingOrPaused() ? "Stop" : "Play";
+            var shortcut = ShortcutManager.instance.GetShortcutBinding("Audio/Play-stop Audio Random Container");
+
+            if (shortcut.Equals(ShortcutBinding.empty))
+            {
+                evt.tooltip = mode;
+            }
+            else
+            {
+                evt.tooltip = mode + " (" + shortcut + ")";
+            }
+
+            evt.rect = (evt.target as VisualElement).worldBound;
+            evt.StopPropagation();
+        }
+    }
+
     void BindAndTrackAutomaticTriggerProperties()
     {
         var automaticTriggerModeProperty = State.SerializedObject.FindProperty("m_AutomaticTriggerMode");
@@ -1146,12 +1203,14 @@ sealed class AudioContainerWindow : EditorWindow
             m_TimeRandomizationButtonImage.style.backgroundImage = new StyleBackground(m_DiceIconOn);
             m_TimeRandomizationRangeSlider.SetEnabled(true);
             m_TimeRandomizationRangeField.SetEnabled(true);
+            m_TimeRandomRangeTracker.SetEnabled(true);
         }
         else
         {
             m_TimeRandomizationButtonImage.style.backgroundImage = new StyleBackground(m_DiceIconOff);
             m_TimeRandomizationRangeSlider.SetEnabled(false);
             m_TimeRandomizationRangeField.SetEnabled(false);
+            m_TimeRandomRangeTracker.SetEnabled(false);
         }
     }
 
@@ -1317,6 +1376,21 @@ sealed class AudioContainerWindow : EditorWindow
 
             if (deletedAssets.Length > 0)
                 Instance.OnAssetsDeleted(deletedAssets);
+        }
+    }
+
+    #endregion
+
+    #region Shortcuts
+
+    [Shortcut("Audio/Play-stop Audio Random Container", typeof(AudioContainerWindow), KeyCode.P, ShortcutModifiers.Alt)]
+    static void Preview(ShortcutArguments args)
+    {
+        var audioContainerWindow = focusedWindow as AudioContainerWindow;
+
+        if (audioContainerWindow != null && audioContainerWindow.IsDisplayingTarget())
+        {
+            audioContainerWindow.OnPlayStopButtonClicked();
         }
     }
 

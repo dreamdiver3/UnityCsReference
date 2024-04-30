@@ -339,10 +339,9 @@ namespace Unity.UI.Builder
         bool DeleteElement(VisualElement element)
         {
             if (BuilderSharedStyles.IsSelectorsContainerElement(element) ||
-                BuilderSharedStyles.IsStyleSheetElement(element) ||
                 BuilderSharedStyles.IsDocumentElement(element) ||
                 !element.IsLinkedToAsset() ||
-                (!BuilderSharedStyles.IsSelectorElement(element) && !element.IsPartOfActiveVisualTreeAsset(m_PaneWindow.document)))
+                (!BuilderSharedStyles.IsSelectorElement(element) && !element.IsPartOfActiveVisualTreeAsset(m_PaneWindow.document) && !BuilderSharedStyles.IsStyleSheetElement(element)))
                 return false;
 
             if (BuilderSharedStyles.IsSelectorElement(element))
@@ -354,9 +353,24 @@ namespace Unity.UI.Builder
                 var selectorStr = BuilderSharedStyles.GetSelectorString(element);
                 styleSheet.RemoveSelector(selectorStr);
 
-                element.RemoveFromHierarchy();
+                // If we are deleting multiple items then its possible that a previous
+                // delete recreated the explorer panel and this element is no longer valid.
+                // In that case, we force an update with OnEnableAfterAllSerialization.
+                if (element.panel == null)
+                {
+                    m_PaneWindow.OnEnableAfterAllSerialization();
+                }
+                else
+                {
+                    element.RemoveFromHierarchy();
+                }
                 m_Selection.NotifyOfHierarchyChange();
 
+                return true;
+            }
+            else if (BuilderSharedStyles.IsStyleSheetElement(element))
+            {
+                BuilderStyleSheetsUtilities.RemoveUSSFromAsset(m_PaneWindow, m_Selection, element);
                 return true;
             }
 
@@ -523,16 +537,16 @@ namespace Unity.UI.Builder
                 BuilderAssetUtilities.ApplyAttributeOverridesToTreeAsset(attributeOverrides, linkedVTACopy);
 
                 // Move attribute overrides to new template containers
-                BuilderAssetUtilities.CopyAttributeOverridesToChildTemplateAssets(attributeOverrides, linkedVTACopy);
-
-                // Sync serialized data because attribute overrides have been updated
-                UxmlSerializer.SyncVisualTreeAssetSerializedData(new CreationContext(linkedVTACopy), false);
+                BuilderAssetUtilities.CopyAttributeOverridesToChildTemplateAssets(elementToUnpack as TemplateContainer, attributeOverrides, linkedVTACopy);
 
                 // Apply stylesheets to new element + inline rules
                 BuilderAssetUtilities.AddStyleSheetsFromTreeAsset(unpackedVEA, linkedInstancedVTA);
                 unpackedVEA.ruleIndex = templateContainerVEA.ruleIndex;
 
                 BuilderAssetUtilities.TransferAssetToAsset(m_PaneWindow.document, unpackedVEA, linkedVTACopy, false);
+
+                // Sync serialized data because attribute overrides have been updated
+                UxmlSerializer.SyncVisualTreeAssetSerializedData(new CreationContext(linkedVTACopy), false);
 
                 elementsToUnpack.Remove(elementToUnpack);
 
@@ -587,6 +601,14 @@ namespace Unity.UI.Builder
         {
             m_Selection.NotifyOfHierarchyChange(null);
             m_Selection.NotifyOfStylingChange(null);
+        }
+
+        public void CreateTargetedSelector(VisualElement ve)
+        {
+            // populates the new selector field with a selector that targets the current element
+            var newSelectorTextField = m_PaneWindow.rootVisualElement.Q<BuilderStyleSheets>().newSelectorField.textField;
+            newSelectorTextField.value = BuilderStyleUtilities.GenerateElementTargetedSelector(ve);
+            newSelectorTextField.Focus();
         }
     }
 }

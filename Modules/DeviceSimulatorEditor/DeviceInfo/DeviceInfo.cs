@@ -87,6 +87,8 @@ namespace UnityEditor.DeviceSimulation
         public int processorCount;
         public int processorFrequency;
         public string processorType;
+        public string processorModel;
+        public string processorManufacturer;
         public bool supportsAccelerometer;
         public bool supportsAudio;
         public bool supportsGyroscope;
@@ -151,6 +153,7 @@ namespace UnityEditor.DeviceSimulation
         public bool supportsAsyncCompute;
         public bool supportsGraphicsFence;
         public bool supportsAsyncGPUReadback;
+        public bool supportsParallelPSOCreation;
         public bool supportsRayTracing;
         public bool supportsRayTracingShaders;
         public bool supportsInlineRayTracing;

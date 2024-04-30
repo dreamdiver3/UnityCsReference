@@ -65,6 +65,30 @@ namespace UnityEngine.TextCore.Text
         [FormerlySerializedAs("m_fallbackFontAssets")][SerializeField]
         protected List<FontAsset> m_FallbackFontAssets;
 
+        internal List<FontAsset> fallbackOSFontAssets
+        {
+            get
+            {
+                if (GetStaticFallbackOSFontAsset() == null)
+                {
+                    SetStaticFallbackOSFontAsset(GetOSFontAssetList());
+                }
+                return GetStaticFallbackOSFontAsset();
+            }
+        }
+
+        private static List<FontAsset> s_FallbackOSFontAssetInternal;
+
+        internal virtual List<FontAsset> GetStaticFallbackOSFontAsset()
+        {
+            return s_FallbackOSFontAssetInternal;
+        }
+
+        internal virtual void SetStaticFallbackOSFontAsset(List<FontAsset> fontAssets)
+        {
+            s_FallbackOSFontAssetInternal = fontAssets;
+        }
+        
         /// <summary>
         /// Determines if the text system will use an instance material derived from the primary material preset or use the default material of the fallback font asset.
         /// </summary>
@@ -163,6 +187,8 @@ namespace UnityEngine.TextCore.Text
         [SerializeField]
         protected List<SpriteAsset> m_FallbackSpriteAssets;
 
+        internal static SpriteAsset s_GlobalSpriteAsset { private set; get; }
+
         /// <summary>
         /// The unicode value of the sprite character that will be used when the requested character sprite is missing from the sprite asset and potential fallbacks.
         /// </summary>
@@ -232,6 +258,7 @@ namespace UnityEngine.TextCore.Text
         }
         [SerializeField]
         protected UnicodeLineBreakingRules m_UnicodeLineBreakingRules;
+       
 
 
         // =============================================
@@ -262,6 +289,9 @@ namespace UnityEngine.TextCore.Text
         void OnEnable()
         {
             lineBreakingRules.LoadLineBreakingRules();
+            SetStaticFallbackOSFontAsset(null);
+            if (s_GlobalSpriteAsset == null)
+                s_GlobalSpriteAsset = Resources.Load<SpriteAsset>("Sprite Assets/Default Sprite Asset");
         }
 
         protected void InitializeFontReferenceLookup()
@@ -343,7 +373,7 @@ namespace UnityEngine.TextCore.Text
             }
             else
             {
-                fontAsset = FontAsset.CreateFontAsset(font, 90, 9, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
+                fontAsset = FontAsset.CreateFontAsset(font, 90, 9, GlyphRenderMode.SDFAA, 1024, 1024, shader, AtlasPopulationMode.Dynamic, true);
             }
 
             if (fontAsset != null)
@@ -359,6 +389,17 @@ namespace UnityEngine.TextCore.Text
             }
 
             return fontAsset;
+        }
+
+        internal virtual Shader GetFontShader()
+        {
+            return TextShaderUtilities.ShaderRef_MobileSDF;
+        }
+
+        private List<FontAsset> GetOSFontAssetList()
+        {
+            var fonts = Font.GetOSFallbacks();
+            return FontAsset.CreateFontAssetOSFallbackList(fonts, GetFontShader());
         }
 
         [VisibleToOtherModules("UnityEngine.IMGUIModule", "UnityEngine.UIElementsModule")]

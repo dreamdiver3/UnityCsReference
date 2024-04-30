@@ -5,6 +5,7 @@
 using System;
 using System.Text;
 using Unity.Properties;
+using UnityEngine.Bindings;
 using UnityEngine.TextCore.Text;
 
 namespace UnityEngine.UIElements
@@ -52,6 +53,8 @@ namespace UnityEngine.UIElements
         internal Action<bool> UpdateScrollOffset { get; set; }
         internal Action UpdateValueFromText { get; set; }
         internal Action UpdateTextFromValue { get; set; }
+
+        [VisibleToOtherModules("UnityEditor.UIBuilderModule")]
         internal Action MoveFocusToCompositeRoot { get; set; }
         internal Func<string> GetDefaultValueType { get; set; }
 
@@ -390,7 +393,7 @@ namespace UnityEngine.UIElements
                 //this approach results not showing leading 0s when input fields are updated from the UI Builder if there is a placeholder text
                 //however since this does not occur at run-time and inputfields are generally empty when placeholder text is set this should be ok
                 //if we want to fix this down the line then defaultValue needs to return null so we could differentiate an empty field vs. one with "0"
-                if (!string.IsNullOrEmpty(value) && text.Equals(edition.GetDefaultValueType()))
+                if (!string.IsNullOrEmpty(value) && (text == null || text.Equals(edition.GetDefaultValueType())))
                     text = "";
 
                 m_PlaceholderText = value;
@@ -442,6 +445,9 @@ namespace UnityEngine.UIElements
                     ((INotifyValueChanged<string>)this).SetValueWithoutNotify(value);
                     parent?.SendEvent(evt);
                 }
+
+                if (!edition.isDelayed && value != null)
+                    edition.UpdateValueFromText?.Invoke();
             }
         }
         string ITextEdition.CullString(string s)
@@ -513,10 +519,14 @@ namespace UnityEngine.UIElements
         {
             get
             {
-                if (edition.hidePlaceholderOnFocus)
-                    return string.IsNullOrEmpty(text) && !hasFocus;
+                var isPlaceholderVisible = m_PlaceholderText.Length > 0;
+                var shouldHideOnFocus = edition.hidePlaceholderOnFocus && hasFocus;
+                var isTextEmpty = string.IsNullOrEmpty(text);
 
-                return string.IsNullOrEmpty(text);
+                if (!isPlaceholderVisible) return false;
+                if (shouldHideOnFocus) return false;
+
+                return isTextEmpty;
             }
         }
 
@@ -551,12 +561,19 @@ namespace UnityEngine.UIElements
                     return new RenderedText(m_PlaceholderText, ZeroWidthSpace);
                 }
 
-                if (effectiveMaskChar != char.MinValue)
+                if (effectiveMaskChar != char.MinValue) // Password
                 {
-                    return new RenderedText(effectiveMaskChar, m_RenderedText.Length, ZeroWidthSpace);
+                    return new RenderedText(effectiveMaskChar, m_RenderedText?.Length ?? 0, ZeroWidthSpace);
                 }
 
-                return new RenderedText(m_RenderedText, ZeroWidthSpace);
+                if (!isReadOnly) // TextField
+                {
+                    return new RenderedText(m_RenderedText, ZeroWidthSpace);
+                }
+                else
+                {
+                    return new RenderedText(m_RenderedText);
+                }
             }
         }
 

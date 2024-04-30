@@ -26,6 +26,7 @@ namespace Unity.UI.Builder
 
         internal struct TestAccess
         {
+            public ToggleButtonGroup buttonStrip;
             public BuilderObjectField dataSourceField;
             public BaseField<string> dataSourceTypeField;
             public TextField dataSourcePathField;
@@ -37,6 +38,7 @@ namespace Unity.UI.Builder
         // Note: They are internal only to be accessible in tests
         internal TestAccess testAccess => new()
         {
+            buttonStrip = m_ButtonStrip,
             dataSourceField = m_DataSourceField,
             dataSourceTypeField = m_DataSourceTypeField,
             dataSourcePathField = m_DataSourcePathField,
@@ -118,13 +120,15 @@ namespace Unity.UI.Builder
         /// </summary>
         public string dataSourcePath => m_DataSourcePathField?.text;
 
-        public string bindingSerializedPropertyPathRoot { get; set; }
+        public string bindingSerializedPropertyRootPath { get; set; }
 
         public UxmlSerializedDataDescription bindingUxmlSerializedDataDescription { get; set; }
 
         public UxmlSerializedDataDescription uxmlSerializedDataDescription => bindingUxmlSerializedDataDescription ?? m_SerializedDataDescription;
 
         protected bool isBinding => bindingUxmlSerializedDataDescription != null;
+
+        private bool isShowingDataSource { get; set; } = true;
 
         /// <summary>
         /// Notifies attributes have changed.
@@ -186,16 +190,25 @@ namespace Unity.UI.Builder
             {
                 case k_BindingAttr_DataSource:
                     m_DataSourceField = target.Q<BuilderObjectField>();
+                    if (m_DataSourceField == null)
+                    {
+                        break;
+                    }
+
                     if (m_DataSourceField.value == null)
                     {
                         m_DataSourceField.SetObjectWithoutNotify(inheritedDataSource);
                     }
+
                     UpdateWarningBox();
-                    UpdateCompleter();
-                    UpdateFoldoutOverride();
                     break;
                 case k_BindingAttr_DataSourceType:
                     m_DataSourceTypeField = target.Q<BaseField<string>>();
+                    if (m_DataSourceTypeField == null)
+                    {
+                        break;
+                    }
+
                     if (string.IsNullOrEmpty(m_DataSourceTypeField.value))
                     {
                         var type = inheritedDataSourceType;
@@ -204,17 +217,22 @@ namespace Unity.UI.Builder
                             m_DataSourceTypeField.SetValueWithoutNotify(type.GetFullNameWithAssembly());
                         }
                     }
-                    UpdateCompleter();
-                    UpdateFoldoutOverride();
+
                     break;
                 case k_BindingAttr_DataSourcePath:
                     m_DataSourcePathField = target.Q<TextField>();
+                    if (m_DataSourcePathField == null)
+                    {
+                        break;
+                    }
+
                     m_DataSourcePathField.isDelayed = true;
                     m_DataSourcePathCompleter = new BuilderDataSourcePathCompleter(m_DataSourcePathField);
-                    UpdateCompleter();
-                    UpdateFoldoutOverride();
                     break;
             }
+
+            UpdateCompleter();
+            UpdateFoldoutOverride();
         }
 
         /// <inheritdoc/>
@@ -227,7 +245,7 @@ namespace Unity.UI.Builder
         /// <inheritdoc/>
         protected override void GenerateSerializedAttributeFields()
         {
-            var path = bindingSerializedPropertyPathRoot == null ? serializedRootPath : bindingSerializedPropertyPathRoot + ".";
+            var path = bindingSerializedPropertyRootPath ?? serializedRootPath;
             var root = new UxmlAssetSerializedDataRoot { dataDescription = uxmlSerializedDataDescription, rootPath = path, classList = { InspectorElement.ussClassName }};
             fieldsContainer.Add(root);
             GenerateDataBindingFields(root);
@@ -239,12 +257,19 @@ namespace Unity.UI.Builder
             {
                 m_BindingsFoldout = new PersistedFoldout() { text = "Bindings", classList = { PersistedFoldout.unindentedUssClassName } };
 
-                m_ButtonStrip = new ToggleButtonGroup("Data Source");
+                m_ButtonStrip = new ToggleButtonGroup("Data Source")
+                {
+                    viewDataKey = isBinding ? "builder__binding-window__data-source-field" : "builder__inspector-header__data-source-field"
+                };
                 m_ButtonStrip.Add(new Button { text = "Object", style = { flexGrow = 1 }, tooltip = k_DataSourceObjectTooltip });
                 m_ButtonStrip.Add(new Button { text = "Type", style = { flexGrow = 1 }, tooltip = k_DataSourceTypeTooltip});
                 m_ButtonStrip.isMultipleSelection = false;
                 m_ButtonStrip.AddToClassList(ToggleButtonGroup.alignedFieldUssClassName);
                 m_ButtonStrip.RegisterValueChangedCallback(evt => SetSourceVisibility(evt.newValue[0]));
+
+                // Show Asset by default.
+                m_ButtonStrip.value = new ToggleButtonGroupState(0b01, 2);
+
                 m_BindingsFoldout.Add(m_ButtonStrip);
                 m_BindingsFoldout.Add(m_SourceWidgetContainer = new VisualElement() { style = { flexGrow = 1 } });
             }
@@ -279,9 +304,13 @@ namespace Unity.UI.Builder
             var attribute = uxmlSerializedDataDescription?.FindAttributeWithUxmlName(k_BindingAttr_DataSourceType) ?? FindAttribute(k_BindingAttr_DataSourceType);
             SetupStyleRow(styleRow, m_TypeFieldContainer, attribute);
 
-            // Show Asset by default.
-            m_ButtonStrip.value = new ToggleButtonGroupState(0b01, 2);
-            SetSourceVisibility(true);
+            // Set current value
+            m_ButtonStrip.value = isShowingDataSource
+                ? new ToggleButtonGroupState(0b01, 2)
+                : new ToggleButtonGroupState(0b10, 2);
+
+            // Force update visibility in case the value didn't change.
+            SetSourceVisibility(isShowingDataSource);
 
             if (isBinding)
             {
@@ -311,7 +340,8 @@ namespace Unity.UI.Builder
             }
 
             var attributeDesc = uxmlSerializedDataDescription.FindAttributeWithUxmlName(attribute);
-            var path = (bindingSerializedPropertyPathRoot == null ? serializedRootPath : bindingSerializedPropertyPathRoot + ".") + attributeDesc.serializedField.Name;
+            var basePath = bindingSerializedPropertyRootPath ?? serializedRootPath;
+            var path = $"{basePath}.{attributeDesc.serializedField.Name}";
             return CreateSerializedAttributeRow(attributeDesc, path, parent);
         }
 
@@ -324,7 +354,8 @@ namespace Unity.UI.Builder
 
             var fieldElement = new UxmlSerializedDataAttributeField();
             var attributeDesc = uxmlSerializedDataDescription.FindAttributeWithUxmlName(attribute);
-            var path = (bindingSerializedPropertyPathRoot == null ? serializedRootPath : bindingSerializedPropertyPathRoot + ".") + attributeDesc.serializedField.Name;
+            var basePath = bindingSerializedPropertyRootPath ?? serializedRootPath;
+            var path = $"{basePath}.{attributeDesc.serializedField.Name}";
             var propertyField = new PropertyField
             {
                 name = builderSerializedPropertyFieldName,
@@ -345,8 +376,10 @@ namespace Unity.UI.Builder
 
         void SetSourceVisibility(bool showAsset)
         {
+            isShowingDataSource = showAsset;
             m_AssetFieldContainer.style.display = showAsset ? DisplayStyle.Flex : DisplayStyle.None;
             m_TypeFieldContainer.style.display = showAsset ? DisplayStyle.None : DisplayStyle.Flex;
+            UpdateCompleter();
         }
 
         /// <inheritdoc/>
@@ -438,7 +471,7 @@ namespace Unity.UI.Builder
 
             var currentUxmlAttributeOwner = attributesUxmlOwner;
 
-            var result = SynchronizePath(bindingSerializedPropertyPathRoot, false);
+            var result = SynchronizePath(bindingSerializedPropertyRootPath, false);
             if (isBinding && result.success)
             {
                 currentUxmlAttributeOwner = result.uxmlAsset;
@@ -519,17 +552,17 @@ namespace Unity.UI.Builder
             m_DataSourcePathCompleter.bindingDataSource = dataSource ? dataSource : inheritedDataSource;
             m_DataSourcePathCompleter.bindingDataSourceType = dataSourceType ?? inheritedDataSourceType;
 
-            if (bindingSerializedPropertyPathRoot != null)
+            if (bindingSerializedPropertyRootPath != null)
             {
                 CallDeserializeOnElement();
                 using (new DisableUndoScope(this))
                 {
-                    var result = SynchronizePath(bindingSerializedPropertyPathRoot, true);
+                    var result = SynchronizePath(bindingSerializedPropertyRootPath, true);
                     m_DataSourcePathCompleter.binding = result.attributeOwner as DataBinding;
                 }
             }
 
-            m_DataSourcePathCompleter.UpdateResults();
+            m_DataSourcePathCompleter.UpdateResults(isShowingDataSource);
         }
 
         void UpdateWarningBox()

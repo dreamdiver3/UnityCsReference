@@ -370,22 +370,87 @@ namespace Unity.UI.Builder
         {
             foreach (var attributeOverride in attributeOverrides)
             {
-                var overwrittenElements = visualTreeAsset.FindElementsByName(attributeOverride.m_ElementName);
+                var elementName = attributeOverride.m_NamesPath[^1];
+                var overwrittenElements = visualTreeAsset.FindElementsByName(elementName);
 
                 foreach (var overwrittenElement in overwrittenElements)
                 {
-                    overwrittenElement.SetAttribute(attributeOverride.m_AttributeName, attributeOverride.m_Value);
+                    if (IsElementInOverridePath(visualTreeAsset, overwrittenElement, attributeOverride))
+                    {
+                        overwrittenElement.SetAttribute(attributeOverride.m_AttributeName, attributeOverride.m_Value);
+                    }
                 }
             }
         }
 
-        public static void CopyAttributeOverridesToChildTemplateAssets(List<TemplateAsset.AttributeOverride> attributeOverrides, VisualTreeAsset visualTreeAsset)
+        private static bool IsElementInOverridePath(VisualTreeAsset vta, UxmlAsset overwrittenElement, TemplateAsset.AttributeOverride attributeOverride)
+        {
+            var namesPath = new List<string>() { overwrittenElement.GetAttributeValue(nameof(VisualElement.name)) };
+
+            while (overwrittenElement.HasParent())
+            {
+                var parent = vta.GetParentAsset(overwrittenElement);
+                parent.TryGetAttributeValue(nameof(VisualElement.name), out var parentName);
+
+                if (!string.IsNullOrEmpty(parentName))
+                {
+                    namesPath.Insert(0, parentName);
+                }
+
+                overwrittenElement = parent;
+            }
+
+            return attributeOverride.NamesPathMatchesElementNamesPath(namesPath);
+        }
+
+        public static void CopyAttributeOverridesToChildTemplateAssets(TemplateContainer parentTemplateContainer, List<TemplateAsset.AttributeOverride> attributeOverrides, VisualTreeAsset visualTreeAsset)
         {
             foreach (var templateAsset in visualTreeAsset.templateAssets)
             {
+                var templateAssetVTA = visualTreeAsset.ResolveTemplate(templateAsset.templateAlias);
+
                 foreach (var attributeOverride in attributeOverrides)
                 {
-                    templateAsset.SetAttributeOverride(attributeOverride.m_ElementName, attributeOverride.m_AttributeName, attributeOverride.m_Value);
+                    // Find possible targeted elements
+                    var targetElementName = attributeOverride.m_NamesPath[^1];
+                    var targetedElements = parentTemplateContainer.Query<VisualElement>(targetElementName);
+
+                    targetedElements.ForEach(element =>
+                    {
+                        var pathToParentTemplateContainer = targetElementName;
+                        var currentParent = element.parent;
+                        string pathToTemplateAsset = null;
+
+                        while (currentParent != parentTemplateContainer)
+                        {
+                            if (currentParent is TemplateContainer tc)
+                            {
+                                if (!templateAsset.TryGetAttributeValue(nameof(VisualElement.name),
+                                        out var templateAssetName))
+                                {
+                                    templateAssetName = "";
+                                }
+
+                                if (tc.templateSource == templateAssetVTA && tc.name == templateAssetName)
+                                {
+                                    pathToTemplateAsset = pathToParentTemplateContainer;
+                                }
+                            }
+
+                            if (!string.IsNullOrEmpty(currentParent.name))
+                            {
+                                pathToParentTemplateContainer = currentParent.name + " " + pathToParentTemplateContainer;
+                            }
+
+                            currentParent = currentParent.parent;
+                        }
+
+                        if (pathToTemplateAsset != null && attributeOverride.NamesPathMatchesElementNamesPath(pathToParentTemplateContainer.Split()))
+                        {
+                            // Add attribute override to the template asset
+                            templateAsset.SetAttributeOverride(element, attributeOverride.m_AttributeName, attributeOverride.m_Value, pathToTemplateAsset.Split());
+                        }
+                    });
                 }
             }
         }
@@ -576,13 +641,14 @@ namespace Unity.UI.Builder
 
             while (parent != null)
             {
-                if (parent is TemplateContainer templateContainer)
+                if (parent is TemplateContainer templateContainer && templateContainer.GetVisualElementAsset() != null)
                 {
-                    if (templateContainer.GetVisualElementAsset() != null)
-                    {
-                        templateContainerParent = templateContainer;
-                    }
+                    templateContainerParent = templateContainer;
+                    break;
+                }
 
+                if (BuilderSharedStyles.IsDocumentElement(parent))
+                {
                     break;
                 }
 
@@ -592,12 +658,36 @@ namespace Unity.UI.Builder
             return templateContainerParent;
         }
 
+        public static bool HasDynamicallyCreatedTemplateAncestor(VisualElement visualElement)
+        {
+            var parent = visualElement.parent;
+            while (parent != null)
+            {
+                if (BuilderSharedStyles.IsDocumentElement(parent))
+                {
+                    return false;
+                }
+
+                if (parent is TemplateContainer
+                    && !parent.HasProperty(VisualTreeAsset.LinkedVEAInTemplatePropertyName)
+                    && parent.GetVisualElementAsset() == null)
+                {
+                    return true;
+                }
+
+                parent = parent.parent;
+            }
+
+            return false;
+        }
+
         public static bool HasAttributeOverrideInRootTemplate(VisualElement visualElement, string attributeName)
         {
             var templateContainer = GetVisualElementRootTemplate(visualElement);
             var templateAsset = templateContainer?.GetVisualElementAsset() as TemplateAsset;
+            var pathToTemplateAsset = TemplateAssetExtensions.GetPathToTemplateAsset(visualElement, templateAsset).ToList();
 
-            return templateAsset?.attributeOverrides.Count(x => x.m_ElementName == visualElement.name && x.m_AttributeName == attributeName) > 0;
+            return templateAsset?.attributeOverrides.Count(x => x.m_AttributeName == attributeName && x.NamesPathMatchesElementNamesPath(pathToTemplateAsset)) > 0;
         }
 
         public static List<CreationContext.AttributeOverrideRange> GetAccumulatedAttributeOverrides(VisualElement visualElement)

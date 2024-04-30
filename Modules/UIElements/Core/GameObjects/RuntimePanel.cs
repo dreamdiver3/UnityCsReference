@@ -4,11 +4,10 @@
 
 namespace UnityEngine.UIElements
 {
-    //TODO: make IRuntimePanel public when UGUI EventSystem support lands in trunk
     /// <summary>
     /// Interface for classes implementing UI runtime panels.
     /// </summary>
-    internal interface IRuntimePanel
+    public interface IRuntimePanel : IPanel
     {
         /// <summary>
         /// The <see cref="UnityEngine.UIElements.PanelSettings"/> asset associated with this panel.
@@ -46,7 +45,7 @@ namespace UnityEngine.UIElements
                 TrickleDown.TrickleDown);
         }
 
-        public override void Update()
+        internal override void Update()
         {
             if (m_PanelSettings != null)
                 m_PanelSettings.ApplyPanelSettings();

@@ -66,13 +66,21 @@ namespace UnityEngine
             return GetTextHandle(settings, true, ref isCached);
         }
 
+        private static bool ShouldCleanup(float currentTime, float lastTime)
+        {
+            // timeSinceLastCleanup can end up negative if lastCleanupTime is from a previous run.
+            // Clean up if this happens.
+            float timeSinceLastCleanup = currentTime - lastTime;
+            return timeSinceLastCleanup > sTimeToFlush || timeSinceLastCleanup < 0;
+        }
+
         private static void ClearUnusedTextHandles()
         {
             var currentTime = Time.realtimeSinceStartup;
             while (textHandlesTuple.Count > 0)
             {
                 var tuple = textHandlesTuple.First();
-                if (currentTime - tuple.lastTimeUsed > sTimeToFlush)
+                if (ShouldCleanup(currentTime, tuple.lastTimeUsed))
                 {
                     GUIStyle.Internal_DestroyTextGenerator(tuple.hashCode);
                     textHandles.Remove(tuple.hashCode);
@@ -87,7 +95,7 @@ namespace UnityEngine
         {
             isCached = false;
             var currentTime = Time.realtimeSinceStartup;
-            if (currentTime - lastCleanupTime > sTimeToFlush)
+            if (ShouldCleanup(currentTime, lastCleanupTime))
             {
                 ClearUnusedTextHandles();
                 lastCleanupTime = currentTime;
@@ -103,8 +111,8 @@ namespace UnityEngine
                 isCached = isCalledFromNative ? textHandleCached.isCachedOnNative : true;
                 if (!textHandleCached.isCachedOnNative && isCalledFromNative)
                 {
-                    textHandleCached.Update(settings);
-                    textHandleCached.UpdatePreferredSize(settings);
+                    textHandleCached.Update();
+                    textHandleCached.UpdatePreferredSize();
                     textHandleCached.isCachedOnNative = true;
                 }
                 return textHandleCached;
@@ -115,8 +123,8 @@ namespace UnityEngine
             var listNode = new LinkedListNode<TextHandleTuple>(tuple);
             handle.tuple = listNode;
             textHandles[hash] = handle;
-            handle.Update(settings);
-            handle.UpdatePreferredSize(settings);
+            handle.Update();
+            handle.UpdatePreferredSize();
             textHandlesTuple.AddLast(listNode);
             handle.isCachedOnNative = isCalledFromNative;
             return handle;
@@ -197,7 +205,7 @@ namespace UnityEngine
 
             if (!font)
             {
-                font = settings.textSettings.GetEditorFont();
+                font = GUIStyle.GetDefaultFont();
             }
 
             settings.fontAsset = settings.textSettings.GetCachedFontAsset(font, TextShaderUtilities.ShaderRef_MobileSDF_IMGUI);
@@ -235,9 +243,15 @@ namespace UnityEngine
             settings.fontStyle = TextGeneratorUtilities.LegacyStyleToNewStyle(style.fontStyle);
             settings.textAlignment = TextGeneratorUtilities.LegacyAlignmentToNewAlignment(tempAlignment);
             settings.overflowMode = LegacyClippingToNewOverflow(style.clipping);
-            settings.wordWrap = rect.width > 0 ? style.wordWrap : false;
             settings.wordWrappingRatio = 0.4f;
-            settings.textWrappingMode = TextWrappingMode.PreserveWhitespace;
+            if (rect.width > 0 && style.wordWrap)
+            {
+                settings.textWrappingMode = TextWrappingMode.PreserveWhitespace;
+            }
+            else
+            {
+                settings.textWrappingMode = TextWrappingMode.PreserveWhitespaceNoWrap;
+            }
             settings.richText = style.richText;
             settings.parseControlCharacters = false;
             settings.isPlaceholder = false;
@@ -245,8 +259,8 @@ namespace UnityEngine
 
             if (style.fontSize > 0)
                 settings.fontSize = style.fontSize;
-            else if (style.font)
-                settings.fontSize = style.font.fontSize;
+            else if (font)
+                settings.fontSize = font.fontSize;
             else
                 settings.fontSize = sFallbackFontSize;
 

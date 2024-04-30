@@ -214,6 +214,7 @@ namespace UnityEditor.UIElements
                 m_Header = m_Footer = null;
                 m_EditorUsedInDecorators = null;
                 m_DecoratorsElement = null;
+                m_IsCulled = true;
                 Clear();
                 InitCulled(editors);
                 return;
@@ -228,6 +229,7 @@ namespace UnityEditor.UIElements
             {
                 m_EditorIndex = editorIndex;
                 m_EditorUsedInDecorators = null;
+                m_IsCulled = false;
                 Clear();
                 Init(editors);
                 return;
@@ -284,7 +286,14 @@ namespace UnityEditor.UIElements
 
             // Need to update the cache for multi-object edit detection.
             if (editor.targets.Length != Selection.objects.Length)
-                inspectorWindow.tracker.RebuildIfNecessary();
+            {
+                // Cannot force rebuild if locked, otherwise we get an infinite update loop.
+                var tracker = inspectorWindow.tracker;
+                if (tracker.isLocked)
+                    tracker.RebuildIfNecessary();
+                else
+                    tracker.ForceRebuild();
+            }
 
             var updateInspectorVisibility = false;
 

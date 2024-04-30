@@ -2,6 +2,7 @@
 // Copyright (c) Unity Technologies. For terms of use, see
 // https://unity3d.com/legal/licenses/Unity_Reference_Only_License
 
+using System;
 using System.Collections.Generic;
 
 namespace UnityEditor.Search
@@ -23,8 +24,6 @@ namespace UnityEditor.Search
 
     class SearchIndexComparer : IComparer<SearchIndexEntry>, IEqualityComparer<SearchIndexEntry>
     {
-        const double EPSILON = 0.0000000000001;
-
         public SearchIndexOperator op { get; private set; }
 
         public SearchIndexComparer(SearchIndexOperator op = SearchIndexOperator.Contains)
@@ -32,6 +31,7 @@ namespace UnityEditor.Search
             this.op = op;
         }
 
+        // TODO: Setting SearchIndexOperator.DoNotCompareScore messes number comparisons
         public int Compare(SearchIndexEntry item1, SearchIndexEntry item2)
         {
             var c = item1.type.CompareTo(item2.type);
@@ -45,9 +45,14 @@ namespace UnityEditor.Search
             {
                 double eps = 0.0;
                 if (op == SearchIndexOperator.Less)
-                    eps = -EPSILON;
+                    eps = -Utils.DOUBLE_EPSILON;
                 else if (op == SearchIndexOperator.Greater)
-                    eps = EPSILON;
+                    eps = Utils.DOUBLE_EPSILON;
+                else if (op == SearchIndexOperator.Equal || op == SearchIndexOperator.Contains || op == SearchIndexOperator.GreaterOrEqual || op == SearchIndexOperator.LessOrEqual)
+                {
+                    if (Utils.Approximately(item1.number, item2.number))
+                        return 0;
+                }
                 c = item1.number.CompareTo(item2.number + eps);
             }
             else
@@ -68,6 +73,19 @@ namespace UnityEditor.Search
         public int GetHashCode(SearchIndexEntry obj)
         {
             return obj.GetHashCode();
+        }
+    }
+
+    struct SearchIndexEntryExactComparer : IComparer<SearchIndexEntry>
+    {
+        public int Compare(SearchIndexEntry x, SearchIndexEntry y)
+        {
+            var keyComparison = x.key.CompareTo(y.key);
+            if (keyComparison != 0) return keyComparison;
+            var crcComparison = x.crc.CompareTo(y.crc);
+            if (crcComparison != 0) return crcComparison;
+            var typeComparison = x.type.CompareTo(y.type);
+            return typeComparison;
         }
     }
 }

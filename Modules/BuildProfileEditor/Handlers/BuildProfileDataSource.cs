@@ -18,7 +18,7 @@ namespace UnityEditor.Build.Profile.Handlers
 
         List<BuildProfile> m_DuplicatedProfiles;
 
-        const string k_AssetFolderPath = "Assets/Settings/BuildProfiles";
+        const string k_AssetFolderPath = "Assets/Settings/Build Profiles";
 
         static string GetNewProfileName(string displayName) => $"{k_AssetFolderPath}/{displayName}.asset";
 
@@ -30,6 +30,7 @@ namespace UnityEditor.Build.Profile.Handlers
             m_DuplicatedProfiles = new List<BuildProfile>();
 
             BuildProfile.AddOnBuildProfileEnable(OnBuildProfileCreated);
+            BuildProfileModuleUtil.CleanUpPlayerSettingsForDeletedBuildProfiles(currentBuildProfiles: customBuildProfiles);
         }
 
         public void Dispose()
@@ -38,7 +39,6 @@ namespace UnityEditor.Build.Profile.Handlers
         }
 
         /// <summary>
-        /// Called by the Build Project Window when a null custom profile is detected.
         /// Removes all null unity objects from the custom profiles list.
         /// </summary>
         internal bool ClearDeletedProfiles()
@@ -56,6 +56,9 @@ namespace UnityEditor.Build.Profile.Handlers
                 customBuildProfiles.RemoveAt(i);
                 changed = true;
             }
+
+            if (changed)
+                BuildProfileModuleUtil.CleanUpPlayerSettingsForDeletedBuildProfiles(currentBuildProfiles: customBuildProfiles);
 
             return changed;
         }
@@ -86,11 +89,11 @@ namespace UnityEditor.Build.Profile.Handlers
         /// Create a custom build profile asset, making sure to create the folders
         /// if needed
         /// </summary>
-        internal static void CreateAsset(string moduleName, StandaloneBuildSubtarget subtarget, string displayName)
+        internal static void CreateAsset(string platformId, string displayName)
         {
             CheckCreateCustomBuildProfileFolders();
 
-            BuildProfile.CreateInstance(moduleName, subtarget, GetNewProfileName(displayName));
+            BuildProfile.CreateInstance(platformId, GetNewProfileName(displayName));
         }
 
         /// <summary>
@@ -102,7 +105,7 @@ namespace UnityEditor.Build.Profile.Handlers
             if (buildProfile == null)
                 return null;
 
-            string path = isClassic ? GetDuplicatedBuilProfilePathForClassic(buildProfile) : AssetDatabase.GetAssetPath(buildProfile);
+            string path = isClassic ? GetDuplicatedBuildProfilePathForClassic(buildProfile) : AssetDatabase.GetAssetPath(buildProfile);
             if (string.IsNullOrEmpty(path))
                 return null;
 
@@ -117,6 +120,15 @@ namespace UnityEditor.Build.Profile.Handlers
 
             string uniqueFilePath = AssetDatabase.GenerateUniqueAssetPath(path);
             AssetDatabase.CreateAsset(duplicatedProfile, uniqueFilePath);
+            EditorAnalytics.SendAnalytic(new BuildProfileCreatedEvent(new BuildProfileCreatedEvent.Payload
+            {
+                creationType = (isClassic)
+                    ? BuildProfileCreatedEvent.CreationType.DuplicateClassic
+                    : BuildProfileCreatedEvent.CreationType.DuplicateProfile,
+                platformId = duplicatedProfile.platformId,
+                platformDisplayName = BuildProfileModuleUtil.GetClassicPlatformDisplayName(duplicatedProfile.platformId),
+            }));
+
             return duplicatedProfile;
         }
 
@@ -134,16 +146,30 @@ namespace UnityEditor.Build.Profile.Handlers
             string assetPath = AssetDatabase.GetAssetPath(buildProfile);
             if (!string.IsNullOrEmpty(assetPath))
             {
+                BuildProfileModuleUtil.DeleteLastRunnableBuildKeyForProfile(buildProfile);
+
+                // We call DestroyImmediate so the build profile's OnDisable gets called
+                UnityEngine.Object.DestroyImmediate(buildProfile, allowDestroyingAssets: true);
                 AssetDatabase.DeleteAsset(assetPath);
             }
         }
 
         internal void DeleteNullProfiles()
         {
+            bool removedProfile = false;
             for (int i = customBuildProfiles.Count - 1; i >= 0; i--)
             {
                 if (customBuildProfiles[i] == null)
+                {
                     customBuildProfiles.RemoveAt(i);
+                    removedProfile = true;
+                }
+            }
+
+            if (removedProfile)
+            {
+                BuildProfileModuleUtil.CleanUpPlayerSettingsForDeletedBuildProfiles(currentBuildProfiles: customBuildProfiles);
+                BuildProfileModuleUtil.DeleteLastRunnableBuildKeyForDeletedProfiles();
             }
         }
 
@@ -275,9 +301,9 @@ namespace UnityEditor.Build.Profile.Handlers
             return Path.Combine(directory, $"{newName}{extension}");
         }
 
-        static string GetDuplicatedBuilProfilePathForClassic(BuildProfile buildProfile)
+        static string GetDuplicatedBuildProfilePathForClassic(BuildProfile buildProfile)
         {
-            string name = BuildProfileModuleUtil.GetClassicPlatformDisplayName(buildProfile.moduleName, buildProfile.subtarget);
+            string name = BuildProfileModuleUtil.GetClassicPlatformDisplayName(buildProfile.platformId);
             return Path.Combine(k_AssetFolderPath, $"{name}.asset");
         }
 
@@ -287,7 +313,7 @@ namespace UnityEditor.Build.Profile.Handlers
                 AssetDatabase.CreateFolder("Assets", "Settings");
 
             if (!AssetDatabase.IsValidFolder(k_AssetFolderPath))
-                AssetDatabase.CreateFolder("Assets/Settings", "BuildProfiles");
+                AssetDatabase.CreateFolder("Assets/Settings", "Build Profiles");
         }
     }
 }

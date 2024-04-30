@@ -705,7 +705,12 @@ namespace UnityEngine.UIElements
             private set => m_Flags = value ? m_Flags | VisualElementFlags.LayoutManual : m_Flags & ~VisualElementFlags.LayoutManual;
         }
 
-        internal float scaledPixelsPerPoint
+        /// <summary>
+        /// Return the resulting scaling from the panel that considers the screen DPI and the customizable scaling factor, but not the transform scale of the element and its ancestors.
+        /// See <see cref="Panel.scaledPixelsPerPoint"/>.
+        /// This should only be called on elements that are part of a panel.
+        /// </summary>
+        public float scaledPixelsPerPoint
         {
             get
             {
@@ -1850,6 +1855,7 @@ namespace UnityEngine.UIElements
         ///
         /// To enhance the RTL functionality of this property, users can explore available third-party plugins in the Unity Asset Store and make use of <see cref="ITextElementExperimentalFeatures.renderedText"/>
         /// </remarks>
+        [CreateProperty]
         public LanguageDirection languageDirection
         {
             get => m_LanguageDirection;
@@ -1860,6 +1866,7 @@ namespace UnityEngine.UIElements
 
                 m_LanguageDirection = value;
                 localLanguageDirection = m_LanguageDirection;
+                NotifyPropertyChanged(languageDirectionProperty);
             }
         }
 

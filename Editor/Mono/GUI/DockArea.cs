@@ -254,7 +254,7 @@ namespace UnityEditor
             if (w &&
                 w.m_Parent &&
                 w.m_Parent.window &&
-                !w.m_Parent.window.m_IsMppmCloneWindow &&
+                !w.m_Parent.window.IsMultiplayerClone() &&
                 w.titleContent != null)
             {
                 w.m_Parent.window.title = w.titleContent.text;
@@ -389,8 +389,8 @@ namespace UnityEditor
                 ShowGenericMenu(position.width - genericMenuLeftOffset, m_TabAreaRect.y + genericMenuTopOffset);
             }
 
-            DrawTabs(m_TabAreaRect);
             HandleSplitView(); //fogbugz 1169963: in order to easily use the splitter in the gameView, it must be prioritized over DrawView(). Side effect for touch is that splitter picking zones might overlap other controls but the tabs still have higher priority so the user can undock the window in that case
+            DrawTabs(m_TabAreaRect);
             DrawView(dockAreaRect);
 
             DrawTabScrollers(m_TabAreaRect);
@@ -421,10 +421,6 @@ namespace UnityEditor
                     tabStyle = Styles.dragTab;
 
                 var firstTabStyle = Styles.dragTabFirst;
-                if (s_HasStaticTabsCapability)
-                {
-                    firstTabStyle = Styles.tabLabel;
-                }
 
                 var totalTabWidth = DragTab(tabAreaRect, m_ScrollOffset, tabStyle, firstTabStyle);
                 if (totalTabWidth > 0f)
@@ -861,12 +857,9 @@ namespace UnityEditor
             {
                 case EventType.TouchDown:
                 case EventType.MouseDown:
-                    if (s_HasStaticTabsCapability)
-                    {
-                        break;
-                    }
+
                     // Handle double click
-                    if (EditorWindow.focusedWindow != null)
+                    if (EditorWindow.focusedWindow != null && !s_HasStaticTabsCapability)
                         WindowMaximizeStateOnDoubleClick(tabAreaRect);
                     if (GUIUtility.hotControl == 0)
                     {
@@ -893,10 +886,7 @@ namespace UnityEditor
                     }
                     break;
                 case EventType.ContextClick:
-                    if (s_HasStaticTabsCapability)
-                    {
-                        break;
-                    }
+
                     if (GUIUtility.hotControl == 0)
                     {
                         int sel = GetTabAtMousePos(tabStyle, evt.mousePosition, scrollOffset, tabAreaRect);
@@ -910,10 +900,11 @@ namespace UnityEditor
                 case EventType.TouchMove:
                 case EventType.MouseDrag:
 
-                    if (s_HasStaticTabsCapability)
+                if (s_HasStaticTabsCapability)
                     {
                         break;
                     }
+
                     if (evt.pointerType == PointerType.Pen && !evt.penStatus.HasFlag(PenStatus.Contact))
                         break;
 
@@ -1018,10 +1009,7 @@ namespace UnityEditor
                     break;
                 case EventType.TouchUp:
                 case EventType.MouseUp:
-                    if (ModeService.HasCapability(ModeCapability.StaticTabs, false))
-                    {
-                        break;
-                    }
+
                     if (GUIUtility.hotControl == id)
                     {
                         Vector2 screenMousePos = GUIUtility.GUIToScreenPoint(evt.mousePosition);
@@ -1169,7 +1157,7 @@ namespace UnityEditor
 
             bool isActive = m_Panes[tabIndex] == EditorWindow.focusedWindow;
 
-            if (isActive)
+            if (isActive && !s_HasStaticTabsCapability)
                 UpdateWindowTitle(m_Panes[tabIndex]); // UnsavedChanges decoration already taken care of.
 
             Rect tabContentRect = new Rect(roundedPosX, tabPositionRect.y, roundedWidth, tabPositionRect.height);

@@ -48,6 +48,7 @@ namespace UnityEditor.SpeedTree.Importer
     {
         public MotionVectorGenerationMode motionVectorModeEnumValue = MotionVectorGenerationMode.Object;
         public bool generateColliders = true;
+        public bool generateRigidbody = true;
     }
 
     [Serializable]
@@ -84,6 +85,7 @@ namespace UnityEditor.SpeedTree.Importer
     internal class MaterialInfo
     {
         public Material material = null;
+        public string defaultName = null;
         public bool exported = false;
     }
 

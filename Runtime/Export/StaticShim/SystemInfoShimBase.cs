@@ -22,6 +22,10 @@ namespace UnityEngine
 
         public virtual string processorType => UnityEngine.SystemInfo.processorType;
 
+        public virtual string processorModel => UnityEngine.SystemInfo.processorModel;
+
+        public virtual string processorManufacturer => UnityEngine.SystemInfo.processorManufacturer;
+
         public virtual int processorFrequency => UnityEngine.SystemInfo.processorFrequency;
 
         public virtual int processorCount => UnityEngine.SystemInfo.processorCount;
@@ -192,6 +196,8 @@ namespace UnityEngine
         public virtual bool supportsGraphicsFence => UnityEngine.SystemInfo.supportsGraphicsFence;
 
         public virtual bool supportsAsyncGPUReadback => UnityEngine.SystemInfo.supportsAsyncGPUReadback;
+
+        public virtual bool supportsParallelPSOCreation => UnityEngine.SystemInfo.supportsParallelPSOCreation;
 
         public virtual bool supportsRayTracing => UnityEngine.SystemInfo.supportsRayTracing;
 

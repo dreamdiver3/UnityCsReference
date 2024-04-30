@@ -54,6 +54,7 @@ using UnityEngine;
 [assembly: InternalsVisibleTo("UnityEditor.PS5.Extensions")]
 [assembly: InternalsVisibleTo("UnityEditor.Switch.Extensions")]
 [assembly: InternalsVisibleTo("UnityEditor.WebGL.Extensions")]
+[assembly: InternalsVisibleTo("Unity.Automation.Players.WebGL")]
 [assembly: InternalsVisibleTo("Unity.WebGL.Extensions")]
 [assembly: InternalsVisibleTo("UnityEditor.LinuxStandalone.Extensions")]
 [assembly: InternalsVisibleTo("UnityEditor.CloudRendering.Extensions")]
@@ -148,6 +149,12 @@ using UnityEngine;
 [assembly: InternalsVisibleTo("UnityEditor.Android.Extensions")]
 
 [assembly: InternalsVisibleTo("Unity.Entities.Build")]
+
+[assembly: InternalsVisibleTo("Unity.Muse.Common.Bridge")]
+[assembly: InternalsVisibleTo("Unity.Muse.Chat.Bridge")]
+
+[assembly: InternalsVisibleTo("Unity.Multiplayer.Playmode.Editor.Bridge")]
+[assembly: InternalsVisibleTo("Unity.DedicatedServer.Editor.Bridge")]
 
 [assembly: InternalsVisibleTo("Unity.Scenes")]
 

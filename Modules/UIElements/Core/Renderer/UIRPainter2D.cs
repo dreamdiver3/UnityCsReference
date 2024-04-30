@@ -129,7 +129,9 @@ namespace UnityEngine.UIElements
         /// </summary>
         public Painter2D()
         {
-            m_Handle = new SafeHandleAccess(UIPainter2D.Create());
+            // Create the Painter2D with computeBBox flag set to true,
+            // This allows other APIs (such as SaveToVectorImage) to know the size of the content.
+            m_Handle = new SafeHandleAccess(UIPainter2D.Create(true));
             m_DetachedAllocator = new DetachedAllocator();
             isPainterActive = true;
             m_OnMeshGenerationDelegate = OnMeshGeneration;
@@ -161,6 +163,7 @@ namespace UnityEngine.UIElements
             }
 
             m_DetachedAllocator.Clear();
+            Reset();
         }
 
 
@@ -280,7 +283,7 @@ namespace UnityEngine.UIElements
         }
 
         /// <summary>
-        /// Begins a new path and empties the list of recorded sub-paths and resets the pen position to (0,0).
+        /// Begins a new path and empties the list of recorded sub-paths.
         /// </summary>
         public void BeginPath()
         {
@@ -537,7 +540,7 @@ namespace UnityEngine.UIElements
         /// </remarks>
         /// <param name="vectorImage">The VectorImage object that will be initialized with this painter. This object should not be null.</param>
         /// <returns>True if the VectorImage initialization succeeded. False otherwise.</returns>
-        public bool SaveToVectorImage(VectorImage vectorImage)
+        public unsafe bool SaveToVectorImage(VectorImage vectorImage)
         {
             if (!isDetached)
             {
@@ -558,20 +561,11 @@ namespace UnityEngine.UIElements
                 indCount += mwd.m_Indices.Length;
             }
 
-            var bboxMin = new Vector2(float.MaxValue, float.MaxValue);
-            var bboxMax = new Vector2(-float.MaxValue, -float.MaxValue);
-            foreach (var mwd in meshes)
-            {
-                var vs = mwd.m_Vertices;
-                for (int i = 0; i < vs.Length; ++i)
-                {
-                    var v = vs[i];
-                    if (float.IsNaN(v.position.x) || float.IsNaN(v.position.y))
-                        continue;
-                    bboxMin = Vector2.Min(bboxMin, v.position);
-                    bboxMax = Vector2.Max(bboxMax, v.position);
-                }
-            }
+            // Case UUM-41589: We cannot simply compute the bbox from the vertices because
+            // of the additional buffer around the shapes used for anti-aliasing. The
+            // ComputeBoundingBoxFromArcs() method peeks into the arc data for more precise measurements.
+            // This is a native method for performance reasons.
+            Rect bbox = UIPainter2D.GetBBox(m_Handle);
 
             // Allocate + copy
             var allVerts = new VectorImageVertex[vertCount];
@@ -586,8 +580,8 @@ namespace UnityEngine.UIElements
                 {
                     var v = verts[i];
                     var p = v.position;
-                    p.x -= bboxMin.x;
-                    p.y -= bboxMin.y;
+                    p.x -= bbox.x;
+                    p.y -= bbox.y;
                     allVerts[vCount++] = new VectorImageVertex() {
                         position = new Vector3(p.x, p.y, Vertex.nearZ),
                         tint = v.tint,
@@ -607,7 +601,7 @@ namespace UnityEngine.UIElements
             vectorImage.version = 0;
             vectorImage.vertices = allVerts;
             vectorImage.indices = allInds;
-            vectorImage.size = bboxMax - bboxMin;
+            vectorImage.size = bbox.size;
 
             return true;
         }

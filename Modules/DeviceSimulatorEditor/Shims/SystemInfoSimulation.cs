@@ -64,6 +64,8 @@ namespace UnityEditor.DeviceSimulation
         public override string operatingSystem => m_SystemInfo.operatingSystem;
         public override OperatingSystemFamily operatingSystemFamily => m_SystemInfoFields.Contains("operatingSystemFamily") ? m_SystemInfo.operatingSystemFamily : base.operatingSystemFamily;
         public override string processorType => m_SystemInfoFields.Contains("processorType") ? m_SystemInfo.processorType : base.processorType;
+        public override string processorModel => m_SystemInfoFields.Contains("processorModel") ? m_SystemInfo?.processorModel : base.processorModel;
+        public override string processorManufacturer => m_SystemInfoFields.Contains("processorManufacturer") ? m_SystemInfo?.processorManufacturer : base.processorManufacturer;
         public override int processorFrequency => m_SystemInfoFields.Contains("processorFrequency") ? m_SystemInfo.processorFrequency : base.processorFrequency;
         public override int processorCount => m_SystemInfoFields.Contains("processorCount") ? m_SystemInfo.processorCount : base.processorCount;
         public override int systemMemorySize => m_SystemInfoFields.Contains("systemMemorySize") ? m_SystemInfo.systemMemorySize : base.systemMemorySize;
@@ -127,6 +129,7 @@ namespace UnityEditor.DeviceSimulation
         public override bool supportsAsyncCompute  =>  m_GraphicsSystemInfoFields.Contains("supportsAsyncCompute") ? m_GraphicsSystemInfo.supportsAsyncCompute : base.supportsAsyncCompute;
         public override bool supportsGraphicsFence  =>  m_GraphicsSystemInfoFields.Contains("supportsGraphicsFence") ? m_GraphicsSystemInfo.supportsGraphicsFence : base.supportsGraphicsFence;
         public override bool supportsAsyncGPUReadback  =>  m_GraphicsSystemInfoFields.Contains("supportsAsyncGPUReadback") ? m_GraphicsSystemInfo.supportsAsyncGPUReadback : base.supportsAsyncGPUReadback;
+        public override bool supportsParallelPSOCreation  =>  m_GraphicsSystemInfoFields.Contains("supportsParallelPSOCreation") ? m_GraphicsSystemInfo.supportsParallelPSOCreation : base.supportsParallelPSOCreation;
         public override bool supportsRayTracing => m_GraphicsSystemInfoFields.Contains("supportsRayTracing") ? m_GraphicsSystemInfo.supportsRayTracing : base.supportsRayTracing;
         public override bool supportsRayTracingShaders => m_GraphicsSystemInfoFields.Contains("supportsRayTracingShaders") ? m_GraphicsSystemInfo.supportsRayTracingShaders : base.supportsRayTracingShaders;
         public override bool supportsInlineRayTracing => m_GraphicsSystemInfoFields.Contains("supportsInlineRayTracing") ? m_GraphicsSystemInfo.supportsInlineRayTracing : base.supportsInlineRayTracing;

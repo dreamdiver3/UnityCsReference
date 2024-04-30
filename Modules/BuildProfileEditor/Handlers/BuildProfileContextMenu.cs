@@ -94,7 +94,6 @@ namespace UnityEditor.Build.Profile.Handlers
 
             string newName = buildProfileLabelName;
             m_ProfileDataSource.RenameAsset(buildProfile, newName);
-            m_ProfileSelection.ClearListViewSelection(BuildProfileWindowSelection.ListViewSelectionType.ClassicAndCustom);
             SelectBuildProfileInView(buildProfile, isClassic: false, shouldAppend: false);
             return true;
         }
@@ -114,29 +113,23 @@ namespace UnityEditor.Build.Profile.Handlers
             }
         }
 
-        internal void SelectClassicBuildProfileInViewForModule(string moduleName)
-        {
-            var targetIndex = -1;
-            for (int i = 0; i < m_ProfileDataSource.classicPlatforms.Count; ++i)
-            {
-                var platform = m_ProfileDataSource.classicPlatforms[i];
-                if (platform.moduleName == moduleName)
-                {
-                    targetIndex = i;
-                    break;
-                }
-            }
-
-            if (targetIndex >= 0)
-                m_ProfileSelection.SelectBuildProfileInViewByIndex(targetIndex, isClassic: true, shouldAppend: false);
-        }
-
         void SelectBuildProfileInView(BuildProfile buildProfile, bool isClassic, bool shouldAppend)
         {
             var targetProfiles = isClassic ? m_ProfileDataSource.classicPlatforms : m_ProfileDataSource.customBuildProfiles;
             var index = targetProfiles.IndexOf(buildProfile);
-            if (index >= 0)
-                m_ProfileSelection.SelectBuildProfileInViewByIndex(index, isClassic, shouldAppend);
+            if (index < 0)
+                return;
+
+            if (isClassic)
+            {
+                m_ProfileSelection.visualElement.SelectInstalledPlatform(index);
+                return;
+            }
+
+            if (shouldAppend)
+                m_ProfileSelection.visualElement.AppendBuildProfileSelection(index);
+            else
+                m_ProfileSelection.visualElement.SelectBuildProfile(index);
         }
 
         void HandleDeleteSelectedProfiles()

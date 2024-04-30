@@ -13,6 +13,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Pool;
 using UnityEditor.Search.Providers;
+using UnityEditor.Utils;
+using UnityEngine.Search;
 
 using UnityEditor.SceneManagement;
 
@@ -25,6 +27,7 @@ namespace UnityEditor.Search
     {
         private static readonly string[] k_Dots = { ".", "..", "..." };
         internal static readonly char[] KeywordsValueDelimiters = new[] { ':', '=', '<', '>', '!', '|' };
+        private static readonly char[] k_AdbInvalidCharacters = {'/', '?', '<', '>', '\\', ':', '*', '|', '"' };
 
         /// <summary>
         /// Separators used to split an entry into indexable tokens.
@@ -534,6 +537,8 @@ namespace UnityEditor.Search
                     icon: GetTypeIcon(typeof(MonoScript)), data: typeof(MonoScript), type: blockType, priority: priority, color: QueryColors.type);
                 yield return new SearchProposition(category: "Types", label: "Scenes", replacement: "t:scene",
                     icon: GetTypeIcon(typeof(SceneAsset)), data: typeof(SceneAsset), type: blockType, priority: priority, color: QueryColors.type);
+                yield return new SearchProposition(category: "Types", label: "Presets", replacement: "t:preset",
+                    icon: GetTypeIcon(typeof(Presets.Preset)), data: typeof(Presets.Preset), type: blockType, priority: priority, color: QueryColors.type);
             }
 
             if (!s_BaseTypes.TryGetValue(typeof(T), out var types))
@@ -544,7 +549,6 @@ namespace UnityEditor.Search
                     typeof(UnityEditorInternal.InternalEditorUtility).Assembly
                 };
                 types = TypeCache.GetTypesDerivedFrom<T>()
-                .Where(t => t.IsVisible)
                 .Where(t => !t.IsGenericType)
                 .Where(t => !ignoredAssemblies.Contains(t.Assembly))
                 .Where(t => !typeof(Editor).IsAssignableFrom(t))
@@ -573,25 +577,38 @@ namespace UnityEditor.Search
                 return SearchProposition.invalid;
 
             var tokens = keyword.Split('|');
-            if (tokens.Length != 5)
+            if (tokens.Length < 5)
                 return SearchProposition.invalid;
 
-            // <0:fieldname>:|<1:display name>|<2:help text>|<3:property type>|<4: owner type string>
+            // <0:fieldname>:|<1:display name>|<2:help text>|<3:property type>|<4: owner type string>|<5:propositionOptions>
             var valueType = tokens[3];
             var replacement = ParseBlockContent(valueType, tokens[0], out Type blockType);
             var ownerType = FindType<UnityEngine.Object>(tokens[4]);
             if (ownerType == null)
                 return SearchProposition.invalid;
+            var generationOptions = SearchPropositionGenerationOptions.None;
+            if (tokens.Length >= 6 && !string.IsNullOrWhiteSpace(tokens[5]))
+            {
+                if (Utils.TryParse<int>(tokens[5], out var temp))
+                {
+                    generationOptions = (SearchPropositionGenerationOptions)temp;
+                }
+            }
             return new SearchProposition(
-                priority: (ownerType.Name[0] << 4) + tokens[1][0],
                 category: $"Properties/{ObjectNames.NicifyVariableName(ownerType.Name)}",
                 label: $"{tokens[1]} ({blockType?.Name ?? valueType})",
                 replacement: replacement,
                 help: tokens[2],
-                color: replacement.StartsWith("#", StringComparison.Ordinal) ? QueryColors.property : QueryColors.filter,
+                priority: (ownerType.Name[0] << 4) + tokens[1][0],
+                moveCursor: TextCursorPlacement.MoveAutoComplete,
                 icon:
                     AssetPreview.GetMiniTypeThumbnailFromType(blockType) ??
-                    GetTypeIcon(ownerType));
+                    GetTypeIcon(ownerType),
+                type: null,
+                data: null,
+                color: replacement.StartsWith("#", StringComparison.Ordinal) ? QueryColors.property : QueryColors.filter,
+                generationOptions: generationOptions
+                );
         }
 
         internal static IEnumerable<SearchProposition> FetchEnumPropositions<T>(string category = null, string replacementId = null, string replacementOp = null, Type blockType = null, int priority = 0, Texture2D icon = null, Color color = default) where T : Enum
@@ -623,7 +640,7 @@ namespace UnityEditor.Search
                 var replacement = label;
                 if (blockType == typeof(QueryFilterBlock))
                 {
-                    replacement = $"{replacementBase}<$enum:{enumName},{enumType.Name}$>";
+                    replacement = $"{replacementBase}<$enum:{enumName},{enumType.FullName}$>";
                 }
                 else if (blockType == typeof(QueryListMarkerBlock))
                 {
@@ -659,51 +676,105 @@ namespace UnityEditor.Search
             return s_TypeIcons[type] = AssetPreview.GetMiniTypeThumbnail(type) ?? AssetPreview.GetMiniTypeThumbnail(typeof(MonoScript));
         }
 
-        internal static IEnumerable<SearchProposition> EnumeratePropertyPropositions(IEnumerable<UnityEngine.Object> objs)
+        internal static IEnumerable<SearchProposition> EnumeratePropertyPropositions(IEnumerable<UnityEngine.Object> objs, Func<SerializedObject, IEnumerable<SerializedProperty>> nonVisiblePropertyIterator = null)
         {
-            return EnumeratePropertyKeywords(objs).Select(k => CreateKeywordProposition(k));
+            return EnumeratePropertyKeywords(objs, nonVisiblePropertyIterator).Select(k => CreateKeywordProposition(k));
         }
 
-        internal static IEnumerable<string> EnumeratePropertyKeywords(IEnumerable<UnityEngine.Object> objs)
+        internal static void IterateSupportedProperties(SerializedObject so, Action<SerializedProperty> handler)
+        {
+            var p = so.GetIterator();
+            var next = p.NextVisible(true);
+            while (next)
+            {
+                var supported = SearchUtils.IsPropertyTypeSupported(p);
+                if (supported)
+                {
+                    handler(p);
+                }
+                next = p.NextVisible(IterateSupportedProperties_EnterChildren(p));
+            }
+        }
+
+        internal static bool IterateSupportedProperties_EnterChildren(SerializedProperty p)
+        {
+            switch (p.propertyType)
+            {
+                case SerializedPropertyType.AnimationCurve:
+                case SerializedPropertyType.Bounds:
+                case SerializedPropertyType.Gradient:
+                case SerializedPropertyType.Vector3Int:
+                case SerializedPropertyType.Vector2Int:
+                case SerializedPropertyType.Vector2:
+                case SerializedPropertyType.Vector3:
+                case SerializedPropertyType.Vector4:
+                case SerializedPropertyType.Quaternion:
+                    return false;
+            }
+
+            if (p.propertyType == SerializedPropertyType.Generic)
+            {
+                if (string.Equals(p.type, "map", StringComparison.Ordinal))
+                    return false;
+                if (string.Equals(p.type, "Matrix4x4f", StringComparison.Ordinal))
+                    return false;
+            }
+
+            return (p.propertyType == SerializedPropertyType.String || !p.isArray) && !p.isFixedBuffer && p.propertyPath.LastIndexOf('[') == -1;
+        }
+
+        internal static string GetPropertyNamePrefix(UnityEngine.Object obj)
+        {
+            var objType = obj.GetType();
+            var isComponent = typeof(Component).IsAssignableFrom(objType);
+            return isComponent ? objType.Name + "." : null;
+        }
+
+        internal static IEnumerable<string> EnumeratePropertyKeywords(IEnumerable<UnityEngine.Object> objs, Func<SerializedObject, IEnumerable<SerializedProperty>> nonVisiblePropertyIterator = null)
         {
             var templates = GetTemplates(objs);
             foreach (var obj in templates)
             {
-                var objType = obj.GetType();
+                var propertyPrefix = GetPropertyNamePrefix(obj);
                 using (var so = new SerializedObject(obj))
                 {
+                    if (nonVisiblePropertyIterator != null)
+                    {
+                        foreach (var serializedProperty in nonVisiblePropertyIterator(so))
+                        {
+                            if (!IsPropertyTypeSupported(serializedProperty)) continue;
+                            var propertyType = GetPropertyManagedTypeString(serializedProperty);
+                            if (propertyType != null)
+                            {
+                                var keyword = CreateKeyword(serializedProperty, propertyType, propertyPrefix);
+                                yield return keyword;
+                            }
+                        }
+                    }
+
                     var p = so.GetIterator();
                     var next = p.NextVisible(true);
                     while (next)
                     {
-                        var supported = IsPropertyTypeSupported(p);
-                        if (supported)
+                        var supported = SearchUtils.IsPropertyTypeSupported(p);
+                        var propertyType = supported ? GetPropertyManagedTypeString(p) : null;
+                        if (propertyType != null)
                         {
-                            var propertyType = GetPropertyManagedTypeString(p);
-                            if (propertyType != null)
-                            {
-                                var keyword = CreateKeyword(p, propertyType);
-                                yield return keyword;
-                            }
+                            var keyword = CreateKeyword(p, propertyType, propertyPrefix);
+                            yield return keyword;
                         }
-
-                        var isVector = p.propertyType == SerializedPropertyType.Vector3 ||
-                            p.propertyType == SerializedPropertyType.Vector4 ||
-                            p.propertyType == SerializedPropertyType.Quaternion ||
-                            p.propertyType == SerializedPropertyType.Vector2;
-
-                        next = p.NextVisible(supported && !p.isArray && !p.isFixedBuffer && !isVector);
+                        next = p.NextVisible(IterateSupportedProperties_EnterChildren(p));
                     }
                 }
             }
         }
 
-        private static string CreateKeyword(in SerializedProperty p, in string propertyType)
+        private static string CreateKeyword(in SerializedProperty p, in string propertyType, in string namePrefix = null)
         {
             var path = p.propertyPath;
             if (path.IndexOf(' ') != -1)
                 path = p.name;
-            return $"#{path.Replace(" ", "")}|{p.displayName}|{p.tooltip}|{propertyType}|{p.serializedObject?.targetObject?.GetType().AssemblyQualifiedName}";
+            return $"#{(string.IsNullOrEmpty(namePrefix) ? "" : namePrefix)}{path.Replace(" ", "")}|{p.displayName}|{p.tooltip}|{propertyType}|{p.serializedObject?.targetObject?.GetType().AssemblyQualifiedName}";
         }
 
         internal static string GetPropertyManagedTypeString(in SerializedProperty p)
@@ -759,23 +830,14 @@ namespace UnityEditor.Search
 
         internal static bool IsPropertyTypeSupported(SerializedProperty p)
         {
-            switch (p.propertyType)
-            {
-                case SerializedPropertyType.AnimationCurve:
-                case SerializedPropertyType.Bounds:
-                case SerializedPropertyType.Gradient:
-                    return false;
-            }
+            var isAsset = !string.IsNullOrEmpty(AssetDatabase.GetAssetPath(p.serializedObject.targetObject));
+            return IsPropertyTypeSupported(p, isAsset);
+        }
 
-            if (p.propertyType == SerializedPropertyType.Generic)
-            {
-                if (string.Equals(p.type, "map", StringComparison.Ordinal))
-                    return false;
-                if (string.Equals(p.type, "Matrix4x4f", StringComparison.Ordinal))
-                    return false;
-            }
-
-            return (p.propertyType == SerializedPropertyType.String || !p.isArray) && !p.isFixedBuffer && p.propertyPath.LastIndexOf('[') == -1;
+        internal static bool IsPropertyTypeSupported(SerializedProperty p, bool isOwnerAsset)
+        {
+            var isSupported = isOwnerAsset ? ObjectIndexer.IsIndexableProperty(p.propertyType) : SearchValue.IsSearchableProperty(p.propertyType);
+            return isSupported && (p.propertyType == SerializedPropertyType.String || !p.isArray) && !p.isFixedBuffer && p.propertyPath.LastIndexOf('[') == -1;
         }
 
         internal static IEnumerable<UnityEngine.Object> GetTemplates(IEnumerable<UnityEngine.Object> objects)
@@ -890,7 +952,7 @@ namespace UnityEditor.Search
                         {
                             var enums = valueType.GetEnumValues();
                             if (enums.Length > 0)
-                                return $"{replacement}=<$enum:{enums.GetValue(0)},{valueType.Name}$>";
+                                return $"{replacement}=<$enum:{enums.GetValue(0)},{valueType.FullName}$>";
                         }
                     }
                     break;
@@ -1006,7 +1068,7 @@ namespace UnityEditor.Search
 
         public static void ShowColumnSelector(Action<IEnumerable<SearchColumn>, int> columnsAddedHandler, IEnumerable<SearchColumn> columns, Vector2 mousePosition, int activeColumnIndex)
         {
-            Utils.CallDelayed(() => ColumnSelector.AddColumns(columnsAddedHandler, columns, mousePosition, activeColumnIndex));
+            ColumnSelector.AddColumns(columnsAddedHandler, columns, mousePosition, activeColumnIndex);
         }
 
         [Obsolete("IMGUI support has been removed", error: false)] // 2023.1
@@ -1089,6 +1151,16 @@ namespace UnityEditor.Search
         {
             SettingsService.OpenUserPreferences(SearchSettings.settingsPreferencesKey);
             SearchAnalytics.SendEvent(null, SearchAnalytics.GenericEventType.QuickSearchOpenPreferences);
+        }
+
+        internal static IEnumerable<SearchProvider> GetActiveProviders(IEnumerable<SearchProvider> providers)
+        {
+            return providers.Where(p => p.active);
+        }
+
+        internal static IEnumerable<SearchProvider> SortProvider(IEnumerable<SearchProvider> providers)
+        {
+            return providers.OrderBy(p => p.priority + (p.isExplicitProvider ? 100000 : 0));
         }
 
         internal static IEnumerable<SearchProvider> GetMergedProviders(IEnumerable<SearchProvider> initialProviders, IEnumerable<string> providerIds)
@@ -1194,11 +1266,6 @@ namespace UnityEditor.Search
             return DisplayMode.Grid;
         }
 
-        internal static ISearchView OpenWithContextualProvider(params string[] providerIds)
-        {
-            return OpenWithContextualProvider(null, providerIds, SearchFlags.OpenContextual);
-        }
-
         internal static string CreateFindObjectReferenceQuery(UnityEngine.Object obj)
         {
             var objPath = GetObjectPath(obj);
@@ -1206,6 +1273,49 @@ namespace UnityEditor.Search
                 return null;
             var query = $"ref=\"{objPath}\"";
             return query;
+        }
+
+        internal static string RemoveInvalidChars(string filename)
+        {
+            filename = string.Concat(filename.Split(Paths.invalidFilenameChars));
+            if (filename.Length > 0 && !char.IsLetterOrDigit(filename[0]))
+                filename = filename.Substring(1);
+            return filename;
+        }
+
+        internal static bool ValidateAssetPath(ref string path, string requiredExtensionWithDot, out string errorMessage)
+        {
+            if (!Paths.IsValidAssetPath(path, requiredExtensionWithDot, out errorMessage))
+            {
+                errorMessage = $"Save Search Query has failed. {errorMessage}";
+                return false;
+            }
+            path = Utils.CleanPath(path);
+            var fileName = Path.GetFileName(path);
+
+            // On Mac Path.GetInvalidFileNameChars() doesn't include <,> but these characters are invalid for ADB.
+            if (fileName.IndexOfAny(k_AdbInvalidCharacters) >= 0)
+            {
+                errorMessage = $"Filename has invalid characters.";
+                return false;
+            }
+
+            var directory = Utils.CleanPath(Path.GetDirectoryName(path));
+            if (!System.IO.Directory.Exists(directory))
+            {
+                errorMessage = $"Directory does not exists {directory}";
+                return false;
+            }
+
+            if (!Utils.IsPathUnderProject(path))
+            {
+                errorMessage = $"Path is not under the project or packages: {path}";
+                return false;
+            }
+
+            path = Utils.GetPathUnderProject(path);
+
+            return true;
         }
 
         [CommandHandler("OpenToFindReferenceOnObject")]
@@ -1221,9 +1331,9 @@ namespace UnityEditor.Search
         {
             var query = CreateFindObjectReferenceQuery(obj);
             if (string.IsNullOrEmpty(query))
-                return SearchWindow.OpenDefaultQuickSearch();
+                return OpenDefaultQuickSearch();
 
-            return OpenWithContextualProvider(query,
+            return OpenWithProviders(query,
                 new [] { Providers.AssetProvider.type, Providers.BuiltInSceneObjectsProvider.type },
                 SearchFlags.Default,
                 "Find References");
@@ -1247,7 +1357,7 @@ namespace UnityEditor.Search
                 c.result = false;
                 return;
             }
-            c.result = IsPropertyValidForQuery(prop);
+            c.result = IsPropertyValidForQuery(prop) && FormatPropertyQuery(prop, out var _) != null;
         }
 
         internal static bool IsPropertyValidForQuery(SerializedProperty prop)
@@ -1260,17 +1370,19 @@ namespace UnityEditor.Search
             return valid && IsPropertyTypeSupported(prop);
         }
 
+        readonly static string[] kAsset_PropertyQueryProviders = new[] { Providers.AssetProvider.type };
+        readonly static string[] kScene_PropertyQueryProviders = new[] { Providers.BuiltInSceneObjectsProvider.type };
+
         internal static ISearchView OpenToSearchByProperty(SerializedProperty prop)
         {
             if (!IsPropertyValidForQuery(prop))
-                return SearchWindow.OpenDefaultQuickSearch();
+                return OpenDefaultQuickSearch();
 
-            var query = FormatPropertyQuery(prop);
+            var query = FormatPropertyQuery(prop, out var isAssetQuery);
             if (query == null)
-                return SearchWindow.OpenDefaultQuickSearch();
+                return OpenDefaultQuickSearch();
 
-            var context = SearchService.CreateContext(query, SearchFlags.OpenGlobal);
-            return SearchService.ShowWindow(context);
+            return OpenWithProviders(query, isAssetQuery ? kAsset_PropertyQueryProviders : kScene_PropertyQueryProviders);
         }
 
         internal static string GetPropertyValueForQuery(SerializedProperty prop)
@@ -1283,57 +1395,114 @@ namespace UnityEditor.Search
                 case SerializedPropertyType.ObjectReference:
                 case SerializedPropertyType.ManagedReference:
                 case SerializedPropertyType.ExposedReference:
-                    return GetObjectPath(value as UnityEngine.Object);
+                    {
+                        if (value == null)
+                            return "none";
+
+                        var path = GetObjectPath(value as UnityEngine.Object);
+                        return $"\"{path}\"";
+                    }
+                case SerializedPropertyType.String:
+                    return $"\"{value}\"";
                 default:
                     return value == null ? null : value.ToString();
             }
         }
 
-        internal static string GetPropertyName(SerializedProperty prop)
+        internal static string GetPropertyOperator(SerializedProperty prop)
         {
-            var fieldName = ObjectIndexer.GetFieldName(prop.displayName);
-            return fieldName;
+            switch (prop.propertyType)
+            {
+                case SerializedPropertyType.Float:
+                    return ":";
+                default:
+                    return "=";
+            }
         }
 
-        internal static string FormatPropertyQuery(SerializedProperty prop)
+        internal static string GetPropertyName(SerializedProperty prop, bool isAsset)
+        {
+            var propertyName = isAsset ? ObjectIndexer.GetFieldName(prop.displayName) : prop.propertyPath.Replace(" ", "").ToLowerInvariant();
+            var propertyPrefix = GetPropertyNamePrefix(prop.serializedObject.targetObject) ?? "";
+            return $"{propertyPrefix}{propertyName}";
+        }
+
+        internal static string FormatPropertyQuery(SerializedProperty prop, out bool isAssetQuery)
         {
             string query = null;
+            isAssetQuery = false;
             if (!IsPropertyValidForQuery(prop))
                 return query;
 
             var target = prop.serializedObject.targetObject;
             var assetPath = AssetDatabase.GetAssetPath(target);
-            var propetyName = GetPropertyName(prop);
+            isAssetQuery = !string.IsNullOrEmpty(assetPath);
+            var propertyName = GetPropertyName(prop, isAssetQuery);
             var propertyValue = GetPropertyValueForQuery(prop);
-            var baseQuery = $"{propetyName}={propertyValue}";
-            if (!string.IsNullOrEmpty(assetPath))
+            var operatorStr = GetPropertyOperator(prop);
+            var propertyQuery = $"{propertyName}{operatorStr}{propertyValue}";
+            if (isAssetQuery)
             {
                 // Format asset Query;
-                return $"{AssetProvider.filterId}{baseQuery}";
+                return $"{AssetProvider.filterId}{propertyQuery}";
             }
-            
+
             if (target is UnityEngine.GameObject || target is MonoBehaviour || target is Component)
             {
                 // Format Hierarchy Query:
-                return $"{BuiltInSceneObjectsProvider.filterId}#{baseQuery}";
+                return $"{BuiltInSceneObjectsProvider.filterId}#{propertyQuery}";
             }
-
             return null;
         }
 
-        internal static ISearchView OpenWithContextualProvider(string searchQuery, string[] providerIds, SearchFlags flags, string topic = null, bool useExplicitProvidersAsNormalProviders = false)
+        internal static SearchProvider[] GetProviderForContextualSearch(IEnumerable<SearchProvider> providers)
+        {
+            return providers.Where(p => p.isEnabledForContextualSearch?.Invoke() ?? false).ToArray();
+        }
+
+        internal static ISearchView OpenNewWindow()
+        {
+            var newContext = SearchService.CreateContext("", SearchFlags.OpenDefault);
+            var viewState = new SearchViewState(newContext, SearchViewFlags.IgnoreSavedSearches);
+            viewState.LoadDefaults();
+            var window = SearchService.ShowWindow(viewState) as SearchWindow;
+            SearchAnalytics.SendEvent(window.state.sessionId, SearchAnalytics.GenericEventType.QuickSearchOpen, "NewWindow");
+            return window;
+        }
+
+        internal static ISearchView OpenDefaultQuickSearch()
+        {
+            var window = SearchWindow.Open(flags: SearchFlags.OpenGlobal);
+            SearchAnalytics.SendEvent(window.state.sessionId, SearchAnalytics.GenericEventType.QuickSearchOpen, "Default");
+            return window;
+        }
+
+        const SearchFlags kWithProviderDefaultFlags = SearchFlags.Multiselect | SearchFlags.Dockable;
+
+        internal static ISearchView OpenWithProviders(params string[] providerIds)
+        {
+            return OpenWithProviders(null, providerIds);
+        }
+
+        [Obsolete("Use OpenWithProviders")]
+        internal static ISearchView OpenWithContextualProvider(string searchQuery, string[] providerIds, SearchFlags flags = kWithProviderDefaultFlags, string topic = null, bool useExplicitProvidersAsNormalProviders = false)
+        {
+            return OpenWithProviders(searchQuery, providerIds, flags, topic, useExplicitProvidersAsNormalProviders);
+        }
+
+        internal static ISearchView OpenWithProviders(string searchQuery, string[] providerIds, SearchFlags flags = kWithProviderDefaultFlags, string topic = null, bool useExplicitProvidersAsNormalProviders = false)
         {
             var providers = SearchService.GetProviders(providerIds).ToArray();
             if (providers.Length != providerIds.Length)
                 Debug.LogWarning($"Cannot find one of these search providers {string.Join(", ", providerIds)}");
 
             if (providers.Length == 0)
-                return SearchWindow.OpenDefaultQuickSearch();
+                return OpenDefaultQuickSearch();
 
             var context = SearchService.CreateContext(providers, searchQuery, flags);
             context.useExplicitProvidersAsNormalProviders = useExplicitProvidersAsNormalProviders;
             topic = topic ?? string.Join(", ", providers.Select(p => p.name.ToLower()));
-            var qsWindow = SearchWindow.Create<SearchWindow>(context, topic);
+            var qsWindow = SearchWindow.Create<SearchWindow>(context, topic, flags);
 
             var evt = SearchAnalytics.GenericEvent.Create(qsWindow.state.sessionId, SearchAnalytics.GenericEventType.QuickSearchOpen, "Contextual");
             evt.message = providers[0].id;
@@ -1349,6 +1518,45 @@ namespace UnityEditor.Search
             SearchAnalytics.SendEvent(evt);
 
             return qsWindow.ShowWindow();
+        }
+
+        internal static ISearchView OpenFromContextWindow(EditorWindow window = null)
+        {
+            var query = "";
+            var focusWindow = window ?? EditorWindow.focusedWindow;
+            if (window != null)
+            {
+                window.Focus();
+            }
+            if (focusWindow is SearchableEditorWindow searchableWindow)
+            {
+                query = searchableWindow.m_SearchFilter;
+            }
+            else if (focusWindow is ISearchableContainer searchable)
+            {
+                query = searchable.searchText;
+            }
+            return OpenFromContextWindow(query, "Help/Search Contextual", ignoreSaveSearches: true, syncSearch: false);
+        }
+
+        internal static ISearchView OpenFromContextWindow(string query, string sourceContext, bool ignoreSaveSearches, bool syncSearch)
+        {
+            var contextualProviders = GetProviderForContextualSearch(SearchService.Providers);
+            if (contextualProviders.Length == 0)
+            {
+                return OpenDefaultQuickSearch();
+            }
+            var flags = SearchFlags.OpenContextual | SearchFlags.ReuseExistingWindow;
+            var context = SearchService.CreateContext(contextualProviders, query);
+            context.options |= flags;
+            var viewState = new SearchViewState(context) { title = null };
+            viewState.LoadDefaults();
+            viewState.ignoreSaveSearches = ignoreSaveSearches;
+            var searchWindow = SearchWindow.Create(viewState) as SearchWindow;
+            searchWindow.ShowWindow(flags: flags);
+            searchWindow.SendEvent(SearchAnalytics.GenericEventType.QuickSearchJumpToSearch, searchWindow.currentGroup, sourceContext);
+            ((ISearchView)searchWindow).syncSearch = syncSearch;
+            return searchWindow;
         }
     }
 }

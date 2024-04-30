@@ -195,6 +195,12 @@ namespace UnityEngine.UIElements
 
         internal event Func<TValueType, TValueType> onValidateValue;
 
+        // This has been introduced as part of the fix for UUM-62652.
+        // Enable some fields to specify how ValueChanged events should be dispatched (queued or immediate). It is mainly used by delayed text fields
+        // to immediately notify on value change as soon as the focus is lost, which was required to fix UUM-62652.
+        [VisibleToOtherModules("UnityEditor.UIBuilderModule")]
+        internal DispatchMode dispatchMode { get; set; } = DispatchMode.Default;
+
         /// <summary>
         /// The value associated with the field.
         /// </summary>
@@ -207,8 +213,9 @@ namespace UnityEngine.UIElements
             }
             set
             {
-                if (!EqualityComparer<TValueType>.Default.Equals(m_Value, value))
+                if (!EqualityComparer<TValueType>.Default.Equals(m_Value, value) || showMixedValue)
                 {
+                    showMixedValue = false;
                     if (panel != null)
                     {
                         var previousValue = m_Value;
@@ -217,7 +224,7 @@ namespace UnityEngine.UIElements
                         using (ChangeEvent<TValueType> evt = ChangeEvent<TValueType>.GetPooled(previousValue, m_Value))
                         {
                             evt.elementTarget = this;
-                            SendEvent(evt);
+                            SendEvent(evt, dispatchMode);
                         }
                         NotifyPropertyChanged(valueProperty);
                     }

@@ -619,8 +619,9 @@ namespace UnityEngine.UIElements.UIR
             m_Settings.fontSize = fontSize;
             m_Settings.color = color;
             m_Settings.material = font.material;
+            m_Settings.textWrappingMode = TextWrappingMode.NoWrap;
 
-            TextCore.Text.TextGenerator.GenerateText(m_Settings, m_TextInfo);
+            TextCore.Text.TextGenerator.GetTextGenerator().GenerateText(m_Settings, m_TextInfo);
 
             DrawTextBase(m_TextInfo, new NativeTextInfo(), pos, false);
         }

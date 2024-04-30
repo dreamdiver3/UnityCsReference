@@ -355,6 +355,10 @@ namespace Unity.UI.Builder
             }
 
             cachedBinding = null;
+
+            // Hide pre and pre-wrap buttons until icons are provided.
+            this.Q<Button>("pre").style.display = DisplayStyle.None;
+            this.Q<Button>("pre-wrap").style.display = DisplayStyle.None;
         }
 
         public void UnsetBoundFieldInlineValue(DropdownMenuAction menuAction)
@@ -786,6 +790,8 @@ namespace Unity.UI.Builder
         internal static void UpdateFieldStatusIconAndStyling(VisualElement currentElement, VisualElement field, FieldValueInfo valueInfo, bool inInspector = true)
         {
             var statusIndicator = field.GetFieldStatusIndicator();
+            if (statusIndicator == null)
+                return;
 
             void ClearClassLists(VisualElement ve)
             {
@@ -797,7 +803,7 @@ namespace Unity.UI.Builder
                 ve.RemoveFromClassList(BuilderConstants.InspectorLocalStyleBindingClassName);
                 ve.RemoveFromClassList(BuilderConstants.InspectorLocalStyleUnresolvedBindingClassName);
                 ve.RemoveFromClassList(BuilderConstants.InspectorLocalStyleSelectorElementClassName);
-            };
+            }
 
             ClearClassLists(field);
             ClearClassLists(statusIndicator);
@@ -1326,6 +1332,19 @@ namespace Unity.UI.Builder
                     m_AttributesSection.refreshScheduledItem = m_AttributesSection.fieldsContainer.schedule.Execute(() => m_AttributesSection.Refresh());
                 }
             }
+        }
+
+        public void BeforeSelectionChanged()
+        {
+            // Check whether the focused element is a field in the inspector. If so, then blur it immediately
+            // to commit its value (e.g: delayed text field such as the name field) before the selection changes
+            if (focusController is { focusedElement: VisualElement focusedElement } && Contains(focusedElement))
+            {
+                focusedElement.BlurImmediately();
+            }
+
+            // Force submit the pending committed value changes
+            m_AttributesSection.ProcessBatchedChanges();
         }
 
         public void SelectionChanged()

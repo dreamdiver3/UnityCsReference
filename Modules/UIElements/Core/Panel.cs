@@ -362,6 +362,18 @@ namespace UnityEngine.UIElements
         /// This method doesn't verify if any bindings have been updated, if there are any pending transitions, or if any referenced assets (such as renderTexture, panelSettings, or textSettings) have been modified.
         /// </remarks>
         bool isDirty { get; }
+
+        /// <summary>
+        /// Gives the current scaled pixels per point value of the panel.
+        /// </summary>
+        /// <remarks>
+        /// Return the resulting scaling that considers all effective inputs like the screen scaling factor from the operating system and the customizable scaling factor.
+        /// The screen scaling factor could be overriden in the editor settings by the user and is not available in the player.
+        /// The customizable scaling factor is set in the panel settings for runtime UI and always set to 1 in the editor.
+        /// </remarks>
+        float scaledPixelsPerPoint { get; }
+
+
     }
 
     /// <summary>
@@ -424,7 +436,6 @@ namespace UnityEngine.UIElements
             // m_VisualPanel.SetOwner(this);
 
             layoutConfig = LayoutManager.SharedManager.CreateConfig();
-            layoutConfig.UseWebDefaults = false;
 
             m_UIElementsBridge = new RuntimeUIElementsBridge();
         }
@@ -698,6 +709,10 @@ namespace UnityEngine.UIElements
 
         internal event Action isFlatChanged;
         bool m_IsFlat = true;
+
+        // Used only for testing. Can be disabled for setting a manual scale
+        internal bool UpdateScalingFromEditorWindow;
+
         public bool isFlat
         {
             get => m_IsFlat;
@@ -757,17 +772,6 @@ namespace UnityEngine.UIElements
 
         public IPanelDebug panelDebug { get; set; }
         public ILiveReloadSystem liveReloadSystem { get; set; }
-
-        public virtual void Update()
-        {
-            scheduler.UpdateScheduledEvents();
-            // This call is already on UIElementsUtility.UpdateSchedulers() but it's also necessary here for Runtime UI
-            UpdateAssetTrackers();
-            ValidateFocus();
-            ValidateLayout();
-            UpdateAnimations();
-            UpdateBindings();
-        }
 
         Action m_RenderAction;
         internal void SetRenderAction(Action action) => m_RenderAction = action;
@@ -1286,10 +1290,6 @@ namespace UnityEngine.UIElements
         {
             m_RepaintVersion = version;
 
-            // in an in-game context, pixelsPerPoint is user driven
-            if (contextType == ContextType.Editor)
-                pixelsPerPoint = GUIUtility.pixelsPerPoint;
-
             repaintData.repaintEvent = e;
 
             using (m_MarkerBeforeUpdate.Auto())
@@ -1458,6 +1458,17 @@ namespace UnityEngine.UIElements
         internal int screenRenderingWidth => getScreenRenderingWidth(targetDisplay);
         internal int screenRenderingHeight => getScreenRenderingHeight(targetDisplay);
 
+        internal virtual void Update()
+        {
+            scheduler.UpdateScheduledEvents();
+            // This call is already on UIElementsUtility.UpdateSchedulers() but it's also necessary here for Runtime UI
+            UpdateAssetTrackers();
+            ValidateFocus();
+            ValidateLayout();
+            UpdateAnimations();
+            UpdateBindings();
+        }
+
         // Expose common static method for getting the display/window resolution for calculation in the PanelSetting.
         // Does not consider the gameView, so useless in the editor unless called directly after the render of a camera
         internal static int getScreenRenderingHeight(int display)
@@ -1558,16 +1569,11 @@ namespace UnityEngine.UIElements
             if (selectableGameObject == null)
                 return;
 
-            var components = ObjectListPool<IRuntimePanelComponent>.Get();
-            try // Going through potential user code
+            using (Pool.ListPool<IRuntimePanelComponent>.Get(out var components))
             {
                 selectableGameObject.GetComponents(components);
                 foreach (var component in components)
                     component.panel = panel;
-            }
-            finally
-            {
-                ObjectListPool<IRuntimePanelComponent>.Release(components);
             }
         }
 

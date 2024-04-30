@@ -92,6 +92,16 @@ namespace UnityEngine
             get { return GetProcessorType(); }
         }
 
+        public static string processorModel
+        {
+            get { return GetProcessorModel(); }
+        }
+
+        public static string processorManufacturer
+        {
+            get { return GetProcessorManufacturer(); }
+        }
+
         public static int processorFrequency
         {
             get { return GetProcessorFrequencyMHz(); }
@@ -593,6 +603,12 @@ namespace UnityEngine
         {
             get { return SupportsAsyncGPUReadback(); }
         }
+
+        public static bool supportsParallelPSOCreation
+        {
+            get { return SupportsParallelPSOCreation(); }
+        }
+
         public static bool supportsRayTracingShaders
         {
             get { return SupportsRayTracingShaders(); }
@@ -715,6 +731,12 @@ namespace UnityEngine
 
         [FreeFunction("systeminfo::GetProcessorType")]
         static extern string GetProcessorType();
+
+        [FreeFunction("systeminfo::GetProcessorModel")]
+        static extern string GetProcessorModel();
+
+        [FreeFunction("systeminfo::GetProcessorManufacturer")]
+        static extern string GetProcessorManufacturer();
 
         [FreeFunction("systeminfo::GetProcessorFrequencyMHz")]
         static extern int GetProcessorFrequencyMHz();
@@ -951,6 +973,9 @@ namespace UnityEngine
 
         [FreeFunction("ScriptingGraphicsCaps::SupportsAsyncGPUReadback")]
         static extern bool SupportsAsyncGPUReadback();
+
+        [FreeFunction("ScriptingGraphicsCaps::SupportsParallelPSOCreation")]
+        static extern bool SupportsParallelPSOCreation();
 
         [FreeFunction("ScriptingGraphicsCaps::SupportsRayTracing")]
         static extern bool SupportsRayTracing();

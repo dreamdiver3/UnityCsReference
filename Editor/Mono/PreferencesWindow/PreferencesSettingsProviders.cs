@@ -61,7 +61,7 @@ namespace UnityEditor
             public static readonly GUIContent applicationFrameThrottling = EditorGUIUtility.TrTextContent("Frame Throttling (milliseconds)", "The number of milliseconds the Editor can idle between frames.");
             public static readonly GUIContent inputMaxProcessTime = EditorGUIUtility.TrTextContent("Input Throttling (milliseconds)", "The maximum number of milliseconds the Editor will take to process user inputs.");
             public static readonly GUIContent interactionMode = EditorGUIUtility.TrTextContent("Interaction Mode", "Specifies how long the Editor can idle before it updates.");
-            public static readonly GUIContent enterPlayModeSettingsFocusGameView = EditorGUIUtility.TrTextContent("Create Game View On Play", "If enabled, a Game View window will be created when entering play mode if none exists");
+            public static readonly GUIContent enterPlayModeSettingsFocusGameView = EditorGUIUtility.TrTextContent("Open Game View On Play", "Open a Game view window when you enter Play mode.");
             public static readonly GUIContent enableExtendedDynamicHints = EditorGUIUtility.TrTextContent("Enable extended Dynamic Hints", "Check this to enable extended Dynamic Hints. If available, extended Dynamic Hints will display more information when a property, object or tool is hovered for enough time, or when a Dynamic Hint is displayed");
             public static readonly GUIContent[] interactionModes =
             {
@@ -88,7 +88,10 @@ namespace UnityEditor
             public static readonly GUIContent enableExtendedLogging = EditorGUIUtility.TrTextContent("Timestamp Editor log entries", "Adds timestamp and thread Id to Editor.log messages.");
             public static readonly GUIContent enableHelperBar = EditorGUIUtility.TrTextContent("Enable Helper Bar", "Enables Helper Bar in the status bar at the bottom of the main Unity Editor window.");
             public static readonly GUIContent enablePlayModeTooltips = EditorGUIUtility.TrTextContent("Enable PlayMode Tooltips", "Enables tooltips in the editor while in play mode.");
-            public static readonly GUIContent showSecondaryWindowsInTaskbar = EditorGUIUtility.TrTextContent("Show All Windows in Taskbar");
+            public static readonly GUIContent showSecondaryWindowsInTaskbar = EditorGUIUtility.TrTextContent("Show All Windows in Taskbar",
+                @"Enabling this setting allows undocked windows to be minimized in the OS taskbar.
+By default, Windows will combine these under a single taskbar item.");
+
             public static readonly GUIContent useProjectPathInTitle = EditorGUIUtility.TrTextContent("Use Project Path in Window Title", "If enabled the Project's name is replaced in the main window title with the Project's path on disk.");
         }
 
